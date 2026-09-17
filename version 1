@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruta de Servicios Críticos — Panel de análisis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --paper:#E9EAE5;
+  --surface:#FFFFFF;
+  --ink:#15191C;
+  --slate:#3D4A52;
+  --slate-deep:#232D33;
+  --line:#D2D5CE;
+  --muted:#6B7680;
+  --signal:#C8102E;
+  --verde:#2F6B4F;
+  --ambar:#C48A16;
+  --azul:#2B5F8C;
+  --violeta:#6B4E7D;
+  --teal:#1F7A78;
+  --radius:3px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:14px;
+  line-height:1.45;
+  font-variant-numeric:tabular-nums;
+}
+button,input,select{font-family:inherit;font-size:inherit}
+:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+
+/* ---------- layout ---------- */
+.shell{display:grid;grid-template-columns:268px minmax(0,1fr);min-height:100vh}
+.rail{
+  background:var(--surface);
+  border-right:1px solid var(--line);
+  padding:20px 18px 40px;
+  position:sticky;top:0;height:100vh;overflow-y:auto;
+}
+.main{padding:22px 26px 60px;min-width:0}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .main{padding:18px 16px 48px}
+}
+
+/* ---------- rail ---------- */
+.brand{margin-bottom:22px}
+.brand h1{font-size:16px;font-weight:700;margin:0;letter-spacing:-0.01em}
+.brand p{margin:3px 0 0;font-size:12px;color:var(--muted)}
+
+.src{border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:22px}
+.src h2{font-size:12px;font-weight:600;margin:0 0 9px;color:var(--slate)}
+.btn{
+  display:block;width:100%;padding:8px 10px;margin-bottom:7px;
+  background:var(--slate-deep);color:#fff;border:0;border-radius:var(--radius);
+  cursor:pointer;font-weight:500;text-align:left;
+}
+.btn:hover{background:var(--slate)}
+.btn.ghost{background:transparent;color:var(--slate);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--paper)}
+.status{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.35}
+.status.err{color:var(--signal)}
+.status.ok{color:var(--verde)}
+
+.fgroup{margin-bottom:14px}
+.fgroup > label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:5px}
+.picker{position:relative}
+.picker-btn{
+  width:100%;text-align:left;padding:7px 9px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;
+  display:flex;justify-content:space-between;gap:8px;align-items:center;
+}
+.picker-btn span.val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.picker-btn span.val.all{color:var(--muted)}
+.picker-btn i{font-style:normal;color:var(--muted);font-size:11px}
+.pop{
+  display:none;position:absolute;z-index:40;top:calc(100% + 3px);left:0;right:0;
+  background:var(--surface);border:1px solid var(--slate);border-radius:var(--radius);
+  box-shadow:0 8px 20px rgba(21,25,28,.14);padding:8px;max-height:280px;overflow:auto;
+}
+.pop.open{display:block}
+.pop input[type=search]{
+  width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius);
+  margin-bottom:7px;
+}
+.pop .acts{display:flex;gap:6px;margin-bottom:7px}
+.pop .acts button{
+  flex:1;padding:4px;font-size:12px;background:var(--paper);border:1px solid var(--line);
+  border-radius:var(--radius);cursor:pointer;color:var(--slate)
+}
+.opt{display:flex;align-items:center;gap:7px;padding:4px 3px;cursor:pointer;border-radius:2px}
+.opt:hover{background:var(--paper)}
+.opt input{margin:0;accent-color:var(--slate-deep)}
+.opt span.n{margin-left:auto;color:var(--muted);font-size:12px}
+.dates{display:flex;gap:6px}
+.dates input{flex:1;min-width:0;padding:6px 7px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+
+/* ---------- kpis ---------- */
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.head h2{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.015em}
+.head p{margin:2px 0 0;color:var(--muted);font-size:13px}
+
+.kpis-wrap{position:relative;margin-bottom:18px}
+.kpis{
+  display:flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);
+  overflow-x:auto;overflow-y:hidden;scrollbar-width:none;cursor:grab;
+}
+.kpis::-webkit-scrollbar{display:none}
+.kpis.grabbing{cursor:grabbing;scroll-snap-type:none}
+.kpi{background:var(--surface);padding:12px 16px;flex:0 0 auto;min-width:150px;user-select:none}
+.kpi b{display:block;font-size:26px;font-weight:700;letter-spacing:-0.02em;line-height:1.1}
+.kpi small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.kfade{position:absolute;top:0;bottom:0;width:32px;pointer-events:none;z-index:2}
+.kfade.l{left:0;background:linear-gradient(90deg,var(--paper),rgba(233,234,229,0))}
+.kfade.r{right:0;background:linear-gradient(270deg,var(--paper),rgba(233,234,229,0))}
+.knav{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+  width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+  color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;
+  box-shadow:0 2px 6px rgba(21,25,28,.12);
+}
+.knav:hover{background:var(--paper)}
+.knav.l{left:-11px}
+.knav.r{right:-11px}
+
+/* ---------- panels ---------- */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.panel{
+  grid-column:span 6;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px 16px 16px;min-width:0;
+}
+.panel.wide{grid-column:span 12}
+.panel.third{grid-column:span 4}
+@media (max-width:1100px){.panel,.panel.third{grid-column:span 12}}
+.panel h3{margin:0;font-size:14px;font-weight:600}
+.panel p.sub{margin:2px 0 12px;font-size:12px;color:var(--muted)}
+.panel .cwrap{position:relative;height:280px}
+.panel.tall .cwrap{height:360px}
+
+.hero{background:var(--slate-deep);border-color:var(--slate-deep);color:#F3F5F4}
+.hero h3{color:#fff}
+.hero p.sub{color:#A9B5BC}
+
+/* ---------- quality bars ---------- */
+.qual{list-style:none;margin:0;padding:0}
+.qual li{margin-bottom:11px}
+.qual .row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px}
+.qual .row em{font-style:normal;color:var(--muted)}
+.bar{height:6px;background:var(--paper);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--slate)}
+.bar i.low{background:var(--signal)}
+.bar i.mid{background:var(--ambar)}
+.bar i.high{background:var(--verde)}
+
+.empty{padding:50px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--radius);background:var(--surface)}
+.empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+.hidden{display:none !important}
+.note{font-size:12px;color:var(--muted);margin-top:10px}
+#drop.drag{outline:2px dashed var(--azul);outline-offset:4px}
+</style>
+</head>
+<body id="drop">
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <h1>Ruta de Servicios Críticos</h1>
+      <p>Panel de tendencias y comparativas</p>
+    </div>
+
+    <div class="src">
+      <h2>Origen de datos</h2>
+      <button class="btn" id="btnSp">Conectar a SharePoint</button>
+      <button class="btn ghost" id="btnLocal">Abrir archivo local</button>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hidden">
+      <p class="status" id="status">Sin datos cargados. También puede arrastrar el archivo a esta ventana.</p>
+    </div>
+
+    <div id="filters"></div>
+
+    <div class="fgroup">
+      <label for="dFrom">Rango de fechas</label>
+      <div class="dates">
+        <input type="date" id="dFrom" aria-label="Desde">
+        <input type="date" id="dTo" aria-label="Hasta">
+      </div>
+    </div>
+
+    <button class="btn ghost" id="btnReset">Limpiar filtros</button>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div>
+        <h2 id="title">Sin datos</h2>
+        <p id="subtitle">Cargue el libro para ver tendencias y comparativas.</p>
+      </div>
+    </div>
+
+    <div id="empty" class="empty">
+      <strong>Aún no hay datos en pantalla</strong>
+      Conecte SharePoint o abra una copia local del libro para comenzar.
+    </div>
+
+    <div id="board" class="hidden">
+      <div class="kpis-wrap">
+        <button class="knav l" id="kpiPrev" aria-label="Retroceder KPIs" type="button">‹</button>
+        <div class="kpis" id="kpis" tabindex="0" aria-label="Indicadores clave, desplazable"></div>
+        <button class="knav r" id="kpiNext" aria-label="Avanzar KPIs" type="button">›</button>
+        <div class="kfade l"></div>
+        <div class="kfade r"></div>
+      </div>
+
+      <div class="grid">
+        <section class="panel wide tall hero">
+          <h3>Volumen mensual por tipo de servicio</h3>
+          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo.</p>
+          <div class="cwrap"><canvas id="cTrend"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Ritmo semanal</h3>
+          <p class="sub">Servicios cerrados por semana, para ver picos y valles dentro del mes.</p>
+          <div class="cwrap"><canvas id="cWeek"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Estado por mes</h3>
+          <p class="sub">Cuánto del trabajo programado queda sin completar cada mes.</p>
+          <div class="cwrap"><canvas id="cEstado"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Clientes con mayor demanda</h3>
+          <p class="sub">Los 12 primeros dentro del filtro activo.</p>
+          <div class="cwrap"><canvas id="cCliente"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Categoría técnica por departamento</h3>
+          <p class="sub">Dónde se concentra la especialidad y qué área la atiende. La fila "Sin categoría" agrupa filas donde el Excel no trae ese dato: cada color muestra qué departamento dejó esas filas sin categoría, no una cuarta especialidad.</p>
+          <div class="cwrap"><canvas id="cCat"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Carga por técnico</h3>
+          <p class="sub">Servicios asignados en el periodo filtrado.</p>
+          <div class="cwrap"><canvas id="cTec"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Entrega de informes</h3>
+          <p class="sub">Porcentaje entregado sobre los servicios que sí tienen el campo registrado.</p>
+          <div class="cwrap"><canvas id="cInf"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Completitud del registro</h3>
+          <p class="sub">Qué tan lleno viene cada campo. Un campo vacío limita lo que este panel puede medir.</p>
+          <ul class="qual" id="qual"></ul>
+          <p class="note" id="qualNote"></p>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* =====================================================================
+   1. CONFIGURACIÓN DE SHAREPOINT
+   Complete estos cinco valores para activar el botón "Conectar a SharePoint".
+   Mientras estén vacíos, el panel funciona en modo archivo local.
+   ===================================================================== */
+const CONFIG = {
+  tenantId:     "",                       // GUID del directorio en Entra ID
+  clientId:     "",                       // GUID del registro de aplicación (tipo SPA)
+  siteHostname: "contoso.sharepoint.com", // dominio de su SharePoint
+  sitePath:     "/sites/NombreDelSitio",  // ruta del sitio
+  filePath:     "/General/00-MT-GS-002_Ruta_de_Servicios_Críticos_2026.xlsx" // ruta dentro de la biblioteca de documentos
+};
+
+const SKIP_SHEETS = ["plantilla"];  // hojas que no son datos
+
+/* =====================================================================
+   2. ESTADO Y UTILIDADES
+   ===================================================================== */
+const COLS = {
+  cliente:"Cliente", dir:"Dirección exacta", po:"PO/AVISO/ STK", ot:"OT",
+  fecha:"Fecha de visita", tipo:"Tipo de servicio", categoria:"Categoria Servicio",
+  depto:"Departamento", tecnico:"Nombre de los técnicos", entrada:"Hora entrada",
+  inicio:"Hora inicio", cierre:"Hora cierre", placa:"Placa Vehículo",
+  zona:"Zona de Gira", estado:"Estado", informe:"Informe",
+  desc:"Descripción", coment:"Comentarios"
+};
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75"];
+const ESTADO_COLOR = {"Completado":"#2F6B4F","Pendiente":"#C48A16","Reprogramado":"#2B5F8C","Cancelado":"#C8102E"};
+
+let RAW = [];              // filas normalizadas
+const FILTERS = {};        // campo -> Set de valores seleccionados
+let dateFrom = null, dateTo = null;
+const charts = {};
+
+const norm = v => (v === null || v === undefined) ? "" : String(v).trim();
+const clean = v => { const s = norm(v); return (!s || s.toUpperCase() === "N/A" || s === "-") ? "" : s; };
+const $ = id => document.getElementById(id);
+
+function setStatus(msg, kind){
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+/* Convierte lo que venga (Date de SheetJS, serial de Excel, texto) a Date UTC */
+function toDate(v){
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  if (typeof v === "number" && v > 20000 && v < 80000){
+    return new Date(Date.UTC(1899,11,30) + Math.round(v) * 86400000);
+  }
+  const s = clean(v);
+  if (!s) return null;
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m){
+    let d = +m[1], mo = +m[2], y = +m[3];
+    if (y < 100) y += 2000;
+    if (mo > 12 && d <= 12){ const t = d; d = mo; mo = t; }   // por si llega en formato m/d/aaaa
+    return new Date(Date.UTC(y, mo - 1, d));
+  }
+  const p = new Date(s);
+  return isNaN(p) ? null : p;
+}
+
+/* Hora -> horas decimales */
+function toHours(v){
+  if (v instanceof Date && !isNaN(v)) return v.getHours() + v.getMinutes()/60;
+  if (typeof v === "number"){
+    if (v >= 0 && v < 1) return v * 24;          // fracción de día (Graph)
+    if (v >= 1 && v < 2) return (v - 1) * 24;
+  }
+  const s = clean(v);
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return +m[1] + (+m[2])/60;
+  return null;
+}
+
+function isoWeekKey(d){
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil((((t - y0) / 86400000) + 1) / 7);
+  return t.getUTCFullYear() + "-W" + String(wk).padStart(2, "0");
+}
+
+function monthKey(d){ return d.getUTCFullYear() + "-" + String(d.getUTCMonth()+1).padStart(2,"0"); }
+function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3) + " " + y.slice(2); }
+
+/* =====================================================================
+   3. NORMALIZACIÓN DE FILAS
+   Recibe una matriz (primera fila = encabezados) y la convierte en objetos.
+   Sirve igual para SheetJS y para Microsoft Graph.
+   ===================================================================== */
+function ingest(matrix, sheetName){
+  if (!matrix || matrix.length < 2) return [];
+  const headers = matrix[0].map(h => norm(h).replace(/\s+/g," "));
+  const idx = {};
+  for (const [key, label] of Object.entries(COLS)){
+    const want = label.replace(/\s+/g," ").toLowerCase();
+    idx[key] = headers.findIndex(h => h.toLowerCase() === want);
+  }
+  const out = [];
+  for (let r = 1; r < matrix.length; r++){
+    const row = matrix[r];
+    if (!row || row.every(c => clean(c) === "")) continue;
+
+    const get = k => idx[k] >= 0 ? row[idx[k]] : null;
+    const fecha = toDate(get("fecha"));
+    const hi = toHours(get("inicio")), hc = toHours(get("cierre"));
+    let horas = null, horasMala = false;
+    if (hi !== null && hc !== null){
+      const d = hc - hi;
+      if (d > 0 && d <= 16) horas = d; else horasMala = true;
+    }
+
+    const rec = {
+      hoja: sheetName,
+      cliente:  clean(get("cliente"))   || "Sin cliente",
+      tipo:     clean(get("tipo"))      || "Sin tipo",
+      categoria:clean(get("categoria")) || "Sin categoría",
+      depto:    clean(get("depto"))     || "Sin departamento",
+      tecnico:  clean(get("tecnico"))   || "Sin asignar",
+      estado:   clean(get("estado"))    || "Sin estado",
+      informe:  clean(get("informe")),
+      zona:     clean(get("zona"))      || "Sin gira",
+      placa:    clean(get("placa")),
+      ot:       clean(get("ot")),
+      desc:     clean(get("desc")),
+      fecha, horas, horasMala,
+      _raw: { cierre: clean(get("cierre")), informe: clean(get("informe")), ot: clean(get("ot")), desc: clean(get("desc")) }
+    };
+    rec.mes  = fecha ? monthKey(fecha)  : null;
+    rec.sem  = fecha ? isoWeekKey(fecha) : null;
+    out.push(rec);
+  }
+  return out;
+}
+
+function loadRows(rows){
+  RAW = rows;
+  buildFilters();
+  const fechas = RAW.map(r => r.fecha).filter(Boolean).sort((a,b) => a - b);
+  if (fechas.length){
+    $("dFrom").min = $("dTo").min = fechas[0].toISOString().slice(0,10);
+    $("dFrom").max = $("dTo").max = fechas[fechas.length-1].toISOString().slice(0,10);
+  }
+  $("empty").classList.add("hidden");
+  $("board").classList.remove("hidden");
+  render();
+}
+
+/* =====================================================================
+   4. FILTROS
+   ===================================================================== */
+const FILTER_DEFS = [
+  { key:"mes",      label:"Mes",          get:r => r.mes ? monthLabel(r.mes) : "Sin fecha", sortKey:r => r.mes || "9999" },
+  { key:"cliente",  label:"Cliente",      get:r => r.cliente },
+  { key:"tipo",     label:"Tipo de servicio", get:r => r.tipo },
+  { key:"categoria",label:"Categoría",    get:r => r.categoria },
+  { key:"depto",    label:"Departamento", get:r => r.depto },
+  { key:"tecnico",  label:"Técnico",      get:r => r.tecnico },
+  { key:"estado",   label:"Estado",       get:r => r.estado },
+  { key:"zona",     label:"Zona de gira", get:r => r.zona }
+];
+
+function buildFilters(){
+  const host = $("filters");
+  host.innerHTML = "";
+  for (const def of FILTER_DEFS){
+    FILTERS[def.key] = FILTERS[def.key] || new Set();
+
+    const counts = new Map();
+    const order = new Map();
+    for (const r of RAW){
+      const v = def.get(r);
+      counts.set(v, (counts.get(v) || 0) + 1);
+      if (def.sortKey) order.set(v, def.sortKey(r));
+    }
+    let values = [...counts.keys()];
+    values.sort(def.sortKey
+      ? (a,b) => String(order.get(a)).localeCompare(String(order.get(b)))
+      : (a,b) => counts.get(b) - counts.get(a) || a.localeCompare(b,"es"));
+
+    // descarta selecciones que ya no existen en el nuevo conjunto
+    for (const s of [...FILTERS[def.key]]) if (!counts.has(s)) FILTERS[def.key].delete(s);
+
+    const g = document.createElement("div");
+    g.className = "fgroup";
+    g.innerHTML = `
+      <label>${def.label}</label>
+      <div class="picker" data-key="${def.key}">
+        <button type="button" class="picker-btn"><span class="val all">Todos</span><i>▾</i></button>
+        <div class="pop">
+          ${values.length > 8 ? '<input type="search" placeholder="Buscar…" aria-label="Buscar ' + def.label + '">' : ''}
+          <div class="acts"><button type="button" data-act="all">Todos</button><button type="button" data-act="none">Ninguno</button></div>
+          <div class="opts"></div>
+        </div>
+      </div>`;
+    const opts = g.querySelector(".opts");
+    for (const v of values){
+      const l = document.createElement("label");
+      l.className = "opt";
+      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${v}</span><span class="n">${counts.get(v)}</span>`;
+      opts.appendChild(l);
+    }
+    host.appendChild(g);
+    wirePicker(g.querySelector(".picker"), def);
+  }
+}
+
+function wirePicker(picker, def){
+  const btn = picker.querySelector(".picker-btn");
+  const pop = picker.querySelector(".pop");
+  const search = pop.querySelector("input[type=search]");
+  const boxes = [...pop.querySelectorAll("input[type=checkbox]")];
+
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    document.querySelectorAll(".pop.open").forEach(p => { if (p !== pop) p.classList.remove("open"); });
+    pop.classList.toggle("open");
+    if (search) search.focus();
+  });
+  pop.addEventListener("click", e => e.stopPropagation());
+
+  if (search) search.addEventListener("input", () => {
+    const q = search.value.toLowerCase();
+    pop.querySelectorAll(".opt").forEach(o => {
+      o.style.display = o.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+
+  pop.querySelectorAll(".acts button").forEach(b => b.addEventListener("click", () => {
+    const on = b.dataset.act === "all";
+    boxes.forEach(cb => {
+      if (cb.closest(".opt").style.display === "none") return;
+      cb.checked = on;
+      on ? FILTERS[def.key].add(cb.value) : FILTERS[def.key].delete(cb.value);
+    });
+    if (b.dataset.act === "all" && FILTERS[def.key].size === boxes.length) FILTERS[def.key].clear();
+    sync(); render();
+  }));
+
+  boxes.forEach(cb => cb.addEventListener("change", () => {
+    cb.checked ? FILTERS[def.key].add(cb.value) : FILTERS[def.key].delete(cb.value);
+    sync(); render();
+  }));
+
+  function sync(){
+    const sel = FILTERS[def.key];
+    const label = btn.querySelector(".val");
+    if (sel.size === 0){ label.textContent = "Todos"; label.classList.add("all"); }
+    else if (sel.size === 1){ label.textContent = [...sel][0]; label.classList.remove("all"); }
+    else { label.textContent = sel.size + " seleccionados"; label.classList.remove("all"); }
+  }
+  picker._sync = sync;
+  sync();
+}
+
+document.addEventListener("click", () => document.querySelectorAll(".pop.open").forEach(p => p.classList.remove("open")));
+
+$("dFrom").addEventListener("change", e => { dateFrom = e.target.value ? new Date(e.target.value + "T00:00:00Z") : null; render(); });
+$("dTo").addEventListener("change",   e => { dateTo   = e.target.value ? new Date(e.target.value + "T23:59:59Z") : null; render(); });
+
+$("btnReset").addEventListener("click", () => {
+  Object.values(FILTERS).forEach(s => s.clear());
+  dateFrom = dateTo = null;
+  $("dFrom").value = $("dTo").value = "";
+  document.querySelectorAll(".picker input[type=checkbox]").forEach(cb => cb.checked = false);
+  document.querySelectorAll(".picker").forEach(p => p._sync && p._sync());
+  render();
+});
+
+function filtered(){
+  return RAW.filter(r => {
+    for (const def of FILTER_DEFS){
+      const sel = FILTERS[def.key];
+      if (sel && sel.size && !sel.has(def.get(r))) return false;
+    }
+    if (dateFrom && (!r.fecha || r.fecha < dateFrom)) return false;
+    if (dateTo   && (!r.fecha || r.fecha > dateTo))   return false;
+    return true;
+  });
+}
+
+/* =====================================================================
+   5. AGREGACIÓN
+   ===================================================================== */
+function countBy(rows, fn){
+  const m = new Map();
+  for (const r of rows){ const k = fn(r); if (k == null) continue; m.set(k, (m.get(k)||0)+1); }
+  return m;
+}
+function topKeys(map, n){
+  return [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n).map(e => e[0]);
+}
+function sortedMonths(rows){
+  return [...new Set(rows.map(r => r.mes).filter(Boolean))].sort();
+}
+
+/* =====================================================================
+   6. GRÁFICAS
+   ===================================================================== */
+Chart.defaults.font.family = "'Archivo',system-ui,sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.animation.duration = 260;
+
+function draw(id, cfg){
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart($(id), cfg);
+}
+
+const gridLight = { color:"rgba(21,25,28,.08)" };
+const gridDark  = { color:"rgba(255,255,255,.12)" };
+const tickDark  = { color:"#B9C4CA" };
+
+function axisTitle(text, dark){
+  return { display:true, text, color: dark ? "#B9C4CA" : "#6B7680",
+    font:{ size:11, weight:"600" } };
+}
+
+function baseScales(dark, stacked, xLabel, yLabel){
+  return {
+    x:{ stacked:!!stacked, grid:{ display:false }, ticks: dark ? tickDark : {},
+        title: xLabel ? axisTitle(xLabel, dark) : undefined },
+    y:{ stacked:!!stacked, beginAtZero:true, grid: dark ? gridDark : gridLight, ticks: dark ? tickDark : {},
+        title: yLabel ? axisTitle(yLabel, dark) : undefined }
+  };
+}
+
+function chartTrend(rows){
+  const months = sortedMonths(rows);
+  const tipos = topKeys(countBy(rows, r => r.tipo), 5);
+  const datasets = tipos.map((t,i) => ({
+    label:t,
+    data: months.map(m => rows.filter(r => r.mes === m && r.tipo === t).length),
+    borderColor: PALETTE[i % PALETTE.length],
+    backgroundColor: PALETTE[i % PALETTE.length],
+    borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5
+  }));
+  datasets.unshift({
+    label:"Total",
+    data: months.map(m => rows.filter(r => r.mes === m).length),
+    borderColor:"#F3F5F4", backgroundColor:"rgba(243,245,244,.10)",
+    borderWidth:2.5, borderDash:[5,3], fill:true, tension:.28, pointRadius:3
+  });
+  draw("cTrend", { type:"line", data:{ labels: months.map(monthLabel), datasets },
+    options:{ maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+      plugins:{ legend:{ labels:{ color:"#D9E0E4", boxWidth:12, boxHeight:12 } } },
+      scales: baseScales(true, false, "Mes", "Servicios") } });
+}
+
+function chartWeek(rows){
+  const weeks = [...new Set(rows.map(r => r.sem).filter(Boolean))].sort();
+  draw("cWeek", { type:"line", data:{ labels:weeks.map(w => "S" + w.split("-W")[1]),
+      datasets:[{ label:"Servicios", data:weeks.map(w => rows.filter(r => r.sem === w).length),
+        borderColor:"#2B5F8C", backgroundColor:"rgba(43,95,140,.12)", fill:true, borderWidth:2, tension:.25, pointRadius:2 }] },
+    options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      scales: baseScales(false, false, "Semana ISO del año", "Servicios cerrados") } });
+}
+
+function chartEstado(rows){
+  const months = sortedMonths(rows);
+  const estados = [...new Set(rows.map(r => r.estado))];
+  draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
+      datasets: estados.map((e,i) => ({ label:e,
+        data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
+        backgroundColor: ESTADO_COLOR[e] || PALETTE[i % PALETTE.length] })) },
+    options:{ maintainAspectRatio:false, plugins:{ legend:{ labels:{ boxWidth:12, boxHeight:12 } } },
+      scales: baseScales(false, true, "Mes", "Servicios") } });
+}
+
+function chartBarH(id, map, n, color, xLabel, yLabel){
+  const top = [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n);
+  draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
+      datasets:[{ data: top.map(e => e[1]), backgroundColor: color, borderRadius:2 }] },
+    options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      scales:{ x:{ beginAtZero:true, grid:gridLight, title: xLabel ? axisTitle(xLabel) : undefined },
+               y:{ grid:{ display:false }, title: yLabel ? axisTitle(yLabel) : undefined } } } });
+}
+
+function chartCat(rows){
+  const cats = topKeys(countBy(rows, r => r.categoria), 10);
+  const deptos = [...new Set(rows.map(r => r.depto))];
+  draw("cCat", { type:"bar", data:{ labels:cats,
+      datasets: deptos.map((d,i) => ({ label:d,
+        data: cats.map(c => rows.filter(r => r.categoria === c && r.depto === d).length),
+        backgroundColor: PALETTE[i % PALETTE.length] })) },
+    options:{ indexAxis:"y", maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ boxWidth:12, boxHeight:12 } } },
+      scales:{ x:{ stacked:true, beginAtZero:true, grid:gridLight, title: axisTitle("Servicios") },
+               y:{ stacked:true, grid:{ display:false }, title: axisTitle("Categoría técnica") } } } });
+}
+
+function chartInforme(rows){
+  const months = sortedMonths(rows);
+  const pct = months.map(m => {
+    const con = rows.filter(r => r.mes === m && r.informe);
+    if (!con.length) return null;
+    return Math.round(con.filter(r => /entregad/i.test(r.informe)).length / con.length * 1000) / 10;
+  });
+  draw("cInf", { type:"line", data:{ labels:months.map(monthLabel),
+      datasets:[{ label:"% entregado", data:pct, borderColor:"#2F6B4F",
+        backgroundColor:"rgba(47,107,79,.12)", fill:true, borderWidth:2, tension:.25,
+        pointRadius:4, spanGaps:true }] },
+    options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      scales:{ x:{ grid:{ display:false }, title: axisTitle("Mes") },
+               y:{ beginAtZero:true, max:100, grid:gridLight, title: axisTitle("% de informes entregados"),
+                   ticks:{ callback:v => v + "%" } } } } });
+}
+
+/* =====================================================================
+   7. KPIs Y CALIDAD
+   ===================================================================== */
+function renderKpis(rows){
+  const total = rows.length;
+  const comp  = rows.filter(r => /completad/i.test(r.estado)).length;
+  const pend  = rows.filter(r => /pendiente/i.test(r.estado)).length;
+  const prev  = rows.filter(r => /preventiv/i.test(r.tipo)).length;
+  const corr  = rows.filter(r => /correctiv/i.test(r.tipo)).length;
+  const sinInf= rows.filter(r => !r.informe || /pendiente/i.test(r.informe)).length;
+  const pc = (a,b) => b ? Math.round(a/b*100) + "%" : "—";
+
+  const meses = countBy(rows, r => r.mes);
+  const mesTop = [...meses.entries()].sort((a,b) => b[1]-a[1])[0];
+  const zonas = countBy(rows, r => r.zona);
+  const zonaTop = [...zonas.entries()].sort((a,b) => b[1]-a[1])[0];
+  const buenas = rows.filter(r => r.horas !== null);
+  const prom = buenas.length ? (buenas.reduce((a,r) => a+r.horas,0)/buenas.length) : null;
+
+  const items = [
+    [total.toLocaleString("es-CR"), "Servicios"],
+    [comp.toLocaleString("es-CR"), `Completados · ${pc(comp,total)}`],
+    [pend.toLocaleString("es-CR"), `Pendientes · ${pc(pend,total)}`],
+    [prev.toLocaleString("es-CR"), `Preventivos · ${pc(prev,total)}`],
+    [corr.toLocaleString("es-CR"), `Correctivos · ${pc(corr,total)}`],
+    [new Set(rows.map(r => r.cliente)).size, "Clientes"],
+    [new Set(rows.map(r => r.tecnico)).size, "Técnicos"],
+    [sinInf.toLocaleString("es-CR"), "Sin informe entregado"],
+    [mesTop ? monthLabel(mesTop[0]) : "—", "Mes con más servicios"],
+    [zonaTop ? zonaTop[0] : "—", "Zona con más giras"],
+    [prom !== null ? prom.toFixed(1) + " h" : "—", "Duración promedio"]
+  ];
+
+  const cardsHtml = items.map(([v,l]) => `<div class="kpi"><b>${v}</b><small>${l}</small></div>`).join("");
+  // se duplica el set para que el desplazamiento automático cierre el ciclo sin salto visible
+  $("kpis").innerHTML = cardsHtml + cardsHtml;
+  initKpiMarquee();
+}
+
+/* ---- franja de KPIs: auto-desplazamiento con arrastre, rueda y botones ---- */
+let kpiPaused = false, kpiResumeTimer = null, kpiHalfWidth = 0;
+
+function kpiPauseFor(ms){
+  kpiPaused = true;
+  clearTimeout(kpiResumeTimer);
+  kpiResumeTimer = setTimeout(() => { kpiPaused = false; }, ms);
+}
+
+function initKpiMarquee(){
+  const el = $("kpis");
+  requestAnimationFrame(() => { kpiHalfWidth = el.scrollWidth / 2; });
+
+  if (el._marqueeWired) return;
+  el._marqueeWired = true;
+
+  el.addEventListener("mouseenter", () => { kpiPaused = true; clearTimeout(kpiResumeTimer); });
+  el.addEventListener("mouseleave", () => { if (!el._dragging) kpiPaused = false; });
+  el.addEventListener("focusin", () => { kpiPaused = true; clearTimeout(kpiResumeTimer); });
+  el.addEventListener("focusout", () => kpiPauseFor(1500));
+
+  el.addEventListener("wheel", e => {
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    el.scrollLeft += delta;
+    e.preventDefault();
+    kpiPauseFor(2200);
+  }, { passive:false });
+
+  el.addEventListener("pointerdown", e => {
+    el._dragging = true; el.classList.add("grabbing");
+    el._startX = e.clientX; el._startScroll = el.scrollLeft;
+    el.setPointerCapture(e.pointerId);
+    kpiPaused = true; clearTimeout(kpiResumeTimer);
+  });
+  el.addEventListener("pointermove", e => {
+    if (!el._dragging) return;
+    el.scrollLeft = el._startScroll - (e.clientX - el._startX);
+  });
+  const endDrag = () => {
+    if (!el._dragging) return;
+    el._dragging = false; el.classList.remove("grabbing");
+    kpiPauseFor(2200);
+  };
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
+
+  el.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight"){ el.scrollLeft += 150; kpiPauseFor(2200); }
+    if (e.key === "ArrowLeft"){ el.scrollLeft -= 150; kpiPauseFor(2200); }
+  });
+
+  $("kpiPrev").addEventListener("click", () => { el.scrollLeft -= 220; kpiPauseFor(2200); });
+  $("kpiNext").addEventListener("click", () => { el.scrollLeft += 220; kpiPauseFor(2200); });
+
+  (function tick(){
+    if (!kpiPaused && el.isConnected){
+      el.scrollLeft += 0.45;
+      if (kpiHalfWidth && el.scrollLeft >= kpiHalfWidth) el.scrollLeft -= kpiHalfWidth;
+    }
+    requestAnimationFrame(tick);
+  })();
+}
+
+function renderQuality(rows){
+  const total = rows.length || 1;
+  const campos = [
+    ["Fecha de visita", rows.filter(r => r.fecha).length],
+    ["Hora de cierre",  rows.filter(r => r._raw.cierre).length],
+    ["Informe",         rows.filter(r => r._raw.informe).length],
+    ["OT",              rows.filter(r => r._raw.ot).length],
+    ["Descripción",     rows.filter(r => r._raw.desc).length]
+  ];
+  $("qual").innerHTML = campos.map(([n,c]) => {
+    const p = Math.round(c/total*100);
+    const cls = p >= 85 ? "high" : p >= 50 ? "mid" : "low";
+    return `<li><div class="row"><span>${n}</span><em>${p}% · ${c.toLocaleString("es-CR")} de ${total.toLocaleString("es-CR")}</em></div>
+            <div class="bar"><i class="${cls}" style="width:${p}%"></i></div></li>`;
+  }).join("");
+
+  const malas = rows.filter(r => r.horasMala).length;
+  const buenas = rows.filter(r => r.horas !== null);
+  const prom = buenas.length ? (buenas.reduce((a,r) => a + r.horas, 0) / buenas.length) : null;
+  $("qualNote").textContent = prom !== null
+    ? `Duración promedio calculada sobre ${buenas.length.toLocaleString("es-CR")} servicios con hora de inicio y cierre válidas: ${prom.toFixed(1)} h. Se descartaron ${malas} registros con horas incoherentes.`
+    : "No hay suficientes horas de inicio y cierre válidas para calcular duración.";
+}
+
+/* =====================================================================
+   8. RENDER
+   ===================================================================== */
+function render(){
+  const rows = filtered();
+  $("title").textContent = rows.length
+    ? rows.length.toLocaleString("es-CR") + " servicios en el filtro actual"
+    : "Ningún servicio coincide con el filtro";
+  const f = rows.map(r => r.fecha).filter(Boolean).sort((a,b) => a-b);
+  $("subtitle").textContent = f.length
+    ? `Del ${f[0].toISOString().slice(0,10)} al ${f[f.length-1].toISOString().slice(0,10)} · ${RAW.length.toLocaleString("es-CR")} registros cargados`
+    : `${RAW.length.toLocaleString("es-CR")} registros cargados`;
+
+  renderKpis(rows);
+  renderQuality(rows);
+  chartTrend(rows);
+  chartWeek(rows);
+  chartEstado(rows);
+  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente");
+  chartCat(rows);
+  chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico");
+  chartInforme(rows);
+}
+
+/* =====================================================================
+   9. ORIGEN A: ARCHIVO LOCAL (SheetJS)
+   ===================================================================== */
+$("btnLocal").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); });
+
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+
+function readFile(file){
+  setStatus("Leyendo " + file.name + "…");
+  const fr = new FileReader();
+  fr.onload = ev => {
+    try{
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type:"array", cellDates:true });
+      let rows = [];
+      for (const name of wb.SheetNames){
+        if (SKIP_SHEETS.includes(name.trim().toLowerCase())) continue;
+        const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:true, defval:null, blankrows:false });
+        rows = rows.concat(ingest(matrix, name.trim()));
+      }
+      if (!rows.length){ setStatus("El archivo no contiene filas reconocibles.", "err"); return; }
+      setStatus(rows.length.toLocaleString("es-CR") + " servicios cargados desde archivo local.", "ok");
+      loadRows(rows);
+    } catch(err){
+      setStatus("No se pudo leer el archivo: " + err.message, "err");
+    }
+  };
+  fr.onerror = () => setStatus("Error al abrir el archivo.", "err");
+  fr.readAsArrayBuffer(file);
+}
+
+/* =====================================================================
+   10. ORIGEN B: SHAREPOINT (MSAL + Microsoft Graph)
+   ===================================================================== */
+const GRAPH = "https://graph.microsoft.com/v1.0";
+let msalApp = null;
+
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error("No se pudo cargar " + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function getToken(){
+  if (!msalApp){
+    await loadScript("https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js");
+    msalApp = new msal.PublicClientApplication({
+      auth:{ clientId: CONFIG.clientId, authority: "https://login.microsoftonline.com/" + CONFIG.tenantId,
+             redirectUri: window.location.origin + window.location.pathname },
+      cache:{ cacheLocation:"sessionStorage" }
+    });
+    await msalApp.initialize();
+  }
+  const scopes = ["Files.Read.All","Sites.Read.All"];
+  let account = msalApp.getAllAccounts()[0];
+  if (!account){
+    const r = await msalApp.loginPopup({ scopes });
+    account = r.account;
+  }
+  try{
+    return (await msalApp.acquireTokenSilent({ scopes, account })).accessToken;
+  } catch {
+    return (await msalApp.acquireTokenPopup({ scopes })).accessToken;
+  }
+}
+
+async function gget(url, token, extraHeaders){
+  const res = await fetch(url, { headers: Object.assign({ Authorization: "Bearer " + token }, extraHeaders || {}) });
+  if (!res.ok){
+    let detail = "";
+    try { detail = (await res.json()).error.message; } catch {}
+    throw new Error(res.status + " " + (detail || res.statusText));
+  }
+  return res.json();
+}
+
+$("btnSp").addEventListener("click", async () => {
+  if (!CONFIG.tenantId || !CONFIG.clientId){
+    setStatus("Falta completar tenantId y clientId en el bloque CONFIG del archivo.", "err");
+    return;
+  }
+  try{
+    setStatus("Autenticando…");
+    const token = await getToken();
+
+    setStatus("Ubicando el sitio…");
+    const site = await gget(`${GRAPH}/sites/${CONFIG.siteHostname}:${CONFIG.sitePath}`, token);
+
+    setStatus("Ubicando el libro…");
+    const item = await gget(`${GRAPH}/sites/${site.id}/drive/root:${encodeURI(CONFIG.filePath)}`, token);
+    const base = `${GRAPH}/sites/${site.id}/drive/items/${item.id}/workbook`;
+
+    // sesión no persistente: acelera lecturas múltiples sobre el mismo libro
+    let sessionHeaders = {};
+    try{
+      const sres = await fetch(base + "/createSession", {
+        method:"POST",
+        headers:{ Authorization:"Bearer " + token, "Content-Type":"application/json" },
+        body: JSON.stringify({ persistChanges:false })
+      });
+      if (sres.ok) sessionHeaders = { "workbook-session-id": (await sres.json()).id };
+    } catch {}
+
+    setStatus("Listando hojas…");
+    const sheets = (await gget(base + "/worksheets", token, sessionHeaders)).value;
+
+    let rows = [];
+    for (const sh of sheets){
+      if (SKIP_SHEETS.includes(sh.name.trim().toLowerCase())) continue;
+      setStatus("Leyendo hoja " + sh.name + "…");
+      const ur = await gget(`${base}/worksheets/${sh.id}/usedRange(valuesOnly=false)?$select=values,text`, token, sessionHeaders);
+      rows = rows.concat(ingest(ur.values, sh.name.trim()));
+    }
+    if (!rows.length){ setStatus("El libro no contiene filas reconocibles.", "err"); return; }
+    setStatus(rows.length.toLocaleString("es-CR") + " servicios cargados desde SharePoint.", "ok");
+    loadRows(rows);
+  } catch(err){
+    setStatus("SharePoint: " + err.message, "err");
+  }
+});
+</script>
+</body>
+</html>
