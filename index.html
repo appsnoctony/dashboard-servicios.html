@@ -68,8 +68,11 @@ button,input,select{font-family:inherit;font-size:inherit}
   cursor:pointer;font-weight:500;text-align:left;
 }
 .btn:hover{background:var(--slate)}
+.btn:disabled{opacity:.55;cursor:default}
 .btn.ghost{background:transparent;color:var(--slate);border:1px solid var(--line)}
 .btn.ghost:hover{background:var(--paper)}
+.btn.secondary{background:var(--azul)}
+.btn.secondary:hover{background:#244d70}
 .status{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.35}
 .status.err{color:var(--signal)}
 .status.ok{color:var(--verde)}
@@ -183,9 +186,11 @@ button,input,select{font-family:inherit;font-size:inherit}
     <div class="src">
       <h2>Origen de datos</h2>
       <button class="btn" id="btnSp">Conectar a SharePoint</button>
+      <button class="btn secondary" id="btnRefresh">Actualizar</button>
       <button class="btn ghost" id="btnLocal">Abrir archivo local</button>
       <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hidden">
       <p class="status" id="status">Sin datos cargados. También puede arrastrar el archivo a esta ventana.</p>
+      <p class="note" id="autoNote" style="margin-top:8px">Actualización automática cada 30 s mientras esta pestaña esté abierta.</p>
     </div>
 
     <div id="filters"></div>
@@ -280,7 +285,7 @@ button,input,select{font-family:inherit;font-size:inherit}
 <script>
 /* =====================================================================
    1. CONFIGURACIÓN DE SHAREPOINT
-   Complete estos cinco valores para activar el botón "Conectar a SharePoint".
+   Complete estos tres valores para activar los botones de SharePoint.
    Mientras estén vacíos, el panel funciona en modo archivo local.
    ===================================================================== */
 const CONFIG = {
@@ -290,6 +295,7 @@ const CONFIG = {
 };
 
 const SKIP_SHEETS = ["plantilla"];  // hojas que no son datos
+const AUTO_REFRESH_SECONDS = 900;    // frecuencia del refresco automático
 
 /* =====================================================================
    2. ESTADO Y UTILIDADES
@@ -878,6 +884,8 @@ function readFile(file){
    ===================================================================== */
 const GRAPH = "https://graph.microsoft.com/v1.0";
 let msalApp = null;
+let isLoadingSp = false;      // evita que se encimen actualizaciones si una todavía está en curso
+let lastLoadTime = null;
 
 function loadScript(src){
   return new Promise((res, rej) => {
@@ -887,27 +895,36 @@ function loadScript(src){
   });
 }
 
-async function getToken(){
+// interactive=true permite abrir la ventana de login si hace falta (uso: clic del usuario).
+// interactive=false solo intenta con la sesión que el navegador ya tenga guardada, sin
+// mostrar ninguna ventana emergente — así el refresco automático no interrumpe a nadie.
+async function getToken(interactive){
   if (!msalApp){
     await loadScript("https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js");
     msalApp = new msal.PublicClientApplication({
       auth:{ clientId: CONFIG.clientId, authority: "https://login.microsoftonline.com/" + CONFIG.tenantId,
              redirectUri: window.location.origin + window.location.pathname },
-      cache:{ cacheLocation:"sessionStorage" }
+      cache:{ cacheLocation:"localStorage" }
     });
     await msalApp.initialize();
   }
   const scopes = ["Files.Read.All","Sites.Read.All"];
   let account = msalApp.getAllAccounts()[0];
+
+  if (account){
+    try{
+      return (await msalApp.acquireTokenSilent({ scopes, account })).accessToken;
+    } catch(e){
+      if (!interactive) throw e;
+    }
+  }
+  if (!interactive) throw new Error("Sin sesión activa");
+
   if (!account){
     const r = await msalApp.loginPopup({ scopes });
     account = r.account;
   }
-  try{
-    return (await msalApp.acquireTokenSilent({ scopes, account })).accessToken;
-  } catch {
-    return (await msalApp.acquireTokenPopup({ scopes })).accessToken;
-  }
+  return (await msalApp.acquireTokenPopup({ scopes, account })).accessToken;
 }
 
 // Convierte un link normal de "Copiar vínculo" al formato que Microsoft Graph
@@ -924,22 +941,32 @@ async function gget(url, token, extraHeaders){
   if (!res.ok){
     let detail = "";
     try { detail = (await res.json()).error.message; } catch {}
-    // Se incluye la URL exacta para saber al instante si el 404 es del sitio o del archivo.
     throw new Error(res.status + " " + (detail || res.statusText) + " — URL: " + url);
   }
   return res.json();
 }
 
-$("btnSp").addEventListener("click", async () => {
-  if (!CONFIG.tenantId || !CONFIG.clientId || !CONFIG.shareUrl){
-    setStatus("Falta completar tenantId, clientId o shareUrl en el bloque CONFIG del archivo.", "err");
-    return;
-  }
-  try{
-    setStatus("Autenticando…");
-    const token = await getToken();
+function setSpButtonsDisabled(disabled){
+  $("btnSp").disabled = disabled;
+  $("btnRefresh").disabled = disabled;
+}
 
-    setStatus("Resolviendo el archivo a partir del link compartido…");
+// interactive=true: uso desde un clic (permite ventana de login si hace falta).
+// interactive=false: uso desde el refresco automático (silencioso, nunca interrumpe).
+async function connectSharePoint(interactive){
+  if (!CONFIG.tenantId || !CONFIG.clientId || !CONFIG.shareUrl){
+    if (interactive) setStatus("Falta completar tenantId, clientId o shareUrl en el bloque CONFIG del archivo.", "err");
+    return false;
+  }
+  if (isLoadingSp) return false;   // ya hay una actualización en curso, no se encima otra
+  isLoadingSp = true;
+  if (interactive) setSpButtonsDisabled(true);
+
+  try{
+    if (interactive) setStatus("Autenticando…");
+    const token = await getToken(interactive);
+
+    if (interactive) setStatus("Resolviendo el archivo a partir del link compartido…");
     const shareId = encodeShareUrl(CONFIG.shareUrl);
     const item = await gget(`${GRAPH}/shares/${shareId}/driveItem`, token);
     const driveId = item.parentReference.driveId;
@@ -956,22 +983,51 @@ $("btnSp").addEventListener("click", async () => {
       if (sres.ok) sessionHeaders = { "workbook-session-id": (await sres.json()).id };
     } catch {}
 
-    setStatus("Listando hojas…");
+    if (interactive) setStatus("Listando hojas…");
     const sheets = (await gget(base + "/worksheets", token, sessionHeaders)).value;
 
     let rows = [];
     for (const sh of sheets){
       if (SKIP_SHEETS.includes(sh.name.trim().toLowerCase())) continue;
-      setStatus("Leyendo hoja " + sh.name + "…");
+      if (interactive) setStatus("Leyendo hoja " + sh.name + "…");
       const ur = await gget(`${base}/worksheets/${sh.id}/usedRange(valuesOnly=false)?$select=values,text`, token, sessionHeaders);
       rows = rows.concat(ingest(ur.values, sh.name.trim()));
     }
-    if (!rows.length){ setStatus("El libro no contiene filas reconocibles.", "err"); return; }
-    setStatus(rows.length.toLocaleString("es-CR") + " servicios cargados desde SharePoint.", "ok");
+    if (!rows.length){
+      if (interactive) setStatus("El libro no contiene filas reconocibles.", "err");
+      return false;
+    }
+
+    lastLoadTime = new Date();
+    setStatus(rows.length.toLocaleString("es-CR") + " servicios · actualizado " + lastLoadTime.toLocaleTimeString("es-CR"), "ok");
     loadRows(rows);
+    return true;
   } catch(err){
-    setStatus("SharePoint: " + err.message, "err");
+    // en el intento silencioso (auto-refresco o carga inicial) un fallo es normal si aún no hay
+    // sesión — no se muestra como error para no confundir a alguien que todavía no ha conectado.
+    if (interactive) setStatus("SharePoint: " + err.message, "err");
+    return false;
+  } finally {
+    isLoadingSp = false;
+    if (interactive) setSpButtonsDisabled(false);
   }
+}
+
+$("btnSp").addEventListener("click", () => connectSharePoint(true));
+$("btnRefresh").addEventListener("click", () => connectSharePoint(true));
+
+// --- auto-conexión al abrir la página, si el navegador aún conserva la sesión ---
+window.addEventListener("load", () => { connectSharePoint(false); });
+
+// --- refresco automático cada 30 segundos mientras la pestaña esté visible ---
+setInterval(() => {
+  if (document.visibilityState === "visible") connectSharePoint(false);
+}, AUTO_REFRESH_SECONDS * 1000);
+
+// si la pestaña estuvo en segundo plano, al volver a ella se refresca de inmediato
+// (en vez de esperar hasta el siguiente tic de 30 s, que pudo haber quedado a mitad)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") connectSharePoint(false);
 });
 </script>
 </body>
