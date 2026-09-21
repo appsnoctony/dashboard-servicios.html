@@ -284,11 +284,9 @@ button,input,select{font-family:inherit;font-size:inherit}
    Mientras estén vacíos, el panel funciona en modo archivo local.
    ===================================================================== */
 const CONFIG = {
-  tenantId:     "c8630483-51dc-426b-9636-d04ff64930dd",
-  clientId:     "fb4f2bad-9009-4a48-8f47-ca4ca632910a",
-  siteHostname: "gruposear.sharepoint.com",
-  sitePath:     "/sites/ServiciosCriticos",
-  filePath:     "/Documentos/02_Rutas de servicio/Rutas de servicio/2026/00-MT-GS-002 Ruta de Servicios Críticos 2026.xlsx"
+  tenantId:  "c8630483-51dc-426b-9636-d04ff64930dd",
+  clientId:  "fb4f2bad-9009-4a48-8f47-ca4ca632910a",
+  shareUrl:  "https://gruposear.sharepoint.com/:x:/s/ServiciosCriticos/IQD_Ei35YAIiTLrHcVBRt7GlAb0bM18tuRc2oMPOe_bL_SA?e=IbZWm2"
 };
 
 const SKIP_SHEETS = ["plantilla"];  // hojas que no son datos
@@ -912,31 +910,40 @@ async function getToken(){
   }
 }
 
+// Convierte un link normal de "Copiar vínculo" al formato que Microsoft Graph
+// necesita para resolverlo directo a un archivo, sin conocer su ruta de carpetas.
+// Referencia: https://learn.microsoft.com/graph/api/shares-get
+function encodeShareUrl(url){
+  const b64 = btoa(unescape(encodeURIComponent(url)))
+    .replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
+  return "u!" + b64;
+}
+
 async function gget(url, token, extraHeaders){
   const res = await fetch(url, { headers: Object.assign({ Authorization: "Bearer " + token }, extraHeaders || {}) });
   if (!res.ok){
     let detail = "";
     try { detail = (await res.json()).error.message; } catch {}
-    throw new Error(res.status + " " + (detail || res.statusText));
+    // Se incluye la URL exacta para saber al instante si el 404 es del sitio o del archivo.
+    throw new Error(res.status + " " + (detail || res.statusText) + " — URL: " + url);
   }
   return res.json();
 }
 
 $("btnSp").addEventListener("click", async () => {
-  if (!CONFIG.tenantId || !CONFIG.clientId){
-    setStatus("Falta completar tenantId y clientId en el bloque CONFIG del archivo.", "err");
+  if (!CONFIG.tenantId || !CONFIG.clientId || !CONFIG.shareUrl){
+    setStatus("Falta completar tenantId, clientId o shareUrl en el bloque CONFIG del archivo.", "err");
     return;
   }
   try{
     setStatus("Autenticando…");
     const token = await getToken();
 
-    setStatus("Ubicando el sitio…");
-    const site = await gget(`${GRAPH}/sites/${CONFIG.siteHostname}:${CONFIG.sitePath}`, token);
-
-    setStatus("Ubicando el libro…");
-    const item = await gget(`${GRAPH}/sites/${site.id}/drive/root:${encodeURI(CONFIG.filePath)}`, token);
-    const base = `${GRAPH}/sites/${site.id}/drive/items/${item.id}/workbook`;
+    setStatus("Resolviendo el archivo a partir del link compartido…");
+    const shareId = encodeShareUrl(CONFIG.shareUrl);
+    const item = await gget(`${GRAPH}/shares/${shareId}/driveItem`, token);
+    const driveId = item.parentReference.driveId;
+    const base = `${GRAPH}/drives/${driveId}/items/${item.id}/workbook`;
 
     // sesión no persistente: acelera lecturas múltiples sobre el mismo libro
     let sessionHeaders = {};
