@@ -179,6 +179,23 @@ button,input,select{font-family:inherit;font-size:inherit}
 .bar i.mid{background:var(--ambar)}
 .bar i.high{background:var(--verde)}
 
+/* ---------- tabla de detalle ---------- */
+.table-wrap{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+table.detail{width:100%;border-collapse:collapse;font-size:12.5px}
+table.detail th{
+  position:sticky;top:0;z-index:1;background:var(--slate-deep);color:#fff;
+  text-align:left;padding:7px 9px;font-weight:600;white-space:nowrap;
+}
+table.detail td{padding:6px 9px;border-top:1px solid var(--line);vertical-align:top}
+table.detail td.desc{min-width:240px;max-width:420px}
+table.detail tbody tr:hover{background:var(--paper)}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.tag.ok{background:rgba(47,107,79,.14);color:var(--verde)}
+.tag.warn{background:rgba(196,138,22,.16);color:var(--ambar)}
+.tag.bad{background:rgba(200,16,46,.12);color:var(--signal)}
+.tag.info{background:rgba(43,95,140,.12);color:var(--azul)}
+.tag.muted{background:rgba(107,118,128,.14);color:var(--muted)}
+
 .empty{padding:50px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--radius);background:var(--surface)}
 .empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
 .hidden{display:none !important}
@@ -284,11 +301,40 @@ button,input,select{font-family:inherit;font-size:inherit}
           <div class="cwrap"><canvas id="cInf"></canvas></div>
         </section>
 
-        <section class="panel">
+        <section class="panel third">
+          <h3>Estado general</h3>
+          <p class="sub">Distribución total en el filtro activo. Clic en un segmento o en la leyenda para ocultarlo en todo el tablero.</p>
+          <div class="cwrap"><canvas id="cEstadoGen"></canvas></div>
+        </section>
+
+        <section class="panel third">
+          <h3>Estado de informes</h3>
+          <p class="sub">Entregados frente a pendientes y sin registrar en el filtro activo.</p>
+          <div class="cwrap"><canvas id="cInfGen"></canvas></div>
+        </section>
+
+        <section class="panel third">
           <h3>Completitud del registro</h3>
           <p class="sub">Qué tan lleno viene cada campo. Un campo vacío limita lo que este panel puede medir.</p>
           <ul class="qual" id="qual"></ul>
           <p class="note" id="qualNote"></p>
+        </section>
+
+        <section class="panel wide">
+          <h3>Detalle de servicios</h3>
+          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Las etiquetas muestran de inmediato qué está completado, pendiente o sin datos.</p>
+          <div class="table-wrap">
+            <table class="detail">
+              <thead>
+                <tr>
+                  <th>Fecha</th><th>Cliente</th><th>OT</th><th>Tipo</th>
+                  <th>Descripción</th><th>Estado</th><th>Informe</th><th>Técnico</th>
+                </tr>
+              </thead>
+              <tbody id="detailBody"></tbody>
+            </table>
+          </div>
+          <p class="note" id="detailNote"></p>
         </section>
       </div>
     </div>
@@ -346,6 +392,7 @@ const charts = {};
 const norm = v => (v === null || v === undefined) ? "" : String(v).trim();
 const clean = v => { const s = norm(v); return (!s || s.toUpperCase() === "N/A" || s === "-") ? "" : s; };
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function setStatus(msg, kind){
   const el = $("status");
@@ -806,6 +853,44 @@ function chartInforme(rows){
                    ticks:{ callback:v => v + "%" } } } } });
 }
 
+/* ---- donas resumen: estado e informes ---- */
+function chartEstadoGen(rows){
+  const estados = [...UNIVERSE.estado].sort((a,b) => a.localeCompare(b,"es"));
+  draw("cEstadoGen", { type:"doughnut",
+    data:{ labels: estados,
+      datasets:[{ data: estados.map(e => rows.filter(r => r.estado === e).length),
+        backgroundColor: estados.map(e => ESTADO_COLOR[e] || "#6B7680"),
+        borderColor:"#FFFFFF", borderWidth:2 }] },
+    options:{ maintainAspectRatio:false, cutout:"55%",
+      onClick: (e, els, chart) => {
+        if (els.length) toggleSeries("estado", chart.data.labels[els[0].index]);
+      },
+      onHover: (e, els) => {
+        if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
+      },
+      plugins:{ legend:{ position:"right", onClick: seriesLegendClick("estado"),
+                 labels:{ boxWidth:12, boxHeight:12 } } } } });
+}
+
+function chartInformeGen(rows){
+  let ent = 0, pend = 0, sin = 0, otro = 0;
+  for (const r of rows){
+    if (!r.informe) sin++;
+    else if (/entregad/i.test(r.informe)) ent++;
+    else if (/pendiente/i.test(r.informe)) pend++;
+    else otro++;
+  }
+  const labels = [], data = [], colors = [];
+  if (ent)  { labels.push("Entregado");     data.push(ent);  colors.push("#2F6B4F"); }
+  if (pend) { labels.push("Pendiente");     data.push(pend); colors.push("#C48A16"); }
+  if (sin)  { labels.push("Sin registrar"); data.push(sin);  colors.push("#C8102E"); }
+  if (otro) { labels.push("Otro valor");    data.push(otro); colors.push("#6B7680"); }
+  draw("cInfGen", { type:"doughnut",
+    data:{ labels, datasets:[{ data, backgroundColor: colors, borderColor:"#FFFFFF", borderWidth:2 }] },
+    options:{ maintainAspectRatio:false, cutout:"55%",
+      plugins:{ legend:{ position:"right", labels:{ boxWidth:12, boxHeight:12 } } } } });
+}
+
 /* =====================================================================
    7. KPIs Y CALIDAD
    ===================================================================== */
@@ -933,6 +1018,45 @@ function renderQuality(rows){
 }
 
 /* =====================================================================
+   7b. DETALLE DE SERVICIOS (tabla con descripción, estado e informe)
+   Se actualiza con los filtros del panel y las series visibles.
+   ===================================================================== */
+const DETAIL_LIMIT = 200;
+
+function estadoTag(estado){
+  if (/completad/i.test(estado))   return '<span class="tag ok">Completado</span>';
+  if (/pendiente/i.test(estado))   return '<span class="tag warn">Pendiente</span>';
+  if (/reprogramad/i.test(estado)) return '<span class="tag info">Reprogramado</span>';
+  if (/cancelad/i.test(estado))    return '<span class="tag bad">Cancelado</span>';
+  return '<span class="tag muted">Sin estado</span>';
+}
+
+function informeTag(informe){
+  if (/entregad/i.test(informe)) return '<span class="tag ok">Entregado</span>';
+  if (/pendiente/i.test(informe)) return '<span class="tag warn">Pendiente</span>';
+  if (!informe) return '<span class="tag bad">Sin registrar</span>';
+  return '<span class="tag muted">' + esc(informe) + '</span>';
+}
+
+function renderDetail(rows){
+  const t = r => r.fecha ? r.fecha.getTime() : -Infinity;
+  const shown = rows.slice().sort((a,b) => t(b) - t(a)).slice(0, DETAIL_LIMIT);
+  $("detailBody").innerHTML = shown.map(r => `<tr>
+    <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : "—"}</td>
+    <td>${esc(r.cliente)}</td>
+    <td>${esc(r.ot) || "—"}</td>
+    <td>${esc(r.tipo)}</td>
+    <td class="desc">${esc(r.desc) || "—"}</td>
+    <td>${estadoTag(r.estado)}</td>
+    <td>${informeTag(r.informe)}</td>
+    <td>${esc(r.tecnico)}</td>
+  </tr>`).join("");
+  $("detailNote").textContent = rows.length > DETAIL_LIMIT
+    ? `Mostrando los ${DETAIL_LIMIT} más recientes de ${rows.length.toLocaleString("es-CR")} servicios que cumplen los filtros. Refine los filtros o las series visibles para ver más.`
+    : `Mostrando ${rows.length.toLocaleString("es-CR")} servicios que cumplen los filtros del panel y las series visibles.`;
+}
+
+/* =====================================================================
    8. RENDER
    ===================================================================== */
 function render(){
@@ -965,6 +1089,9 @@ function render(){
   chartCat(panelRows, rows);
   chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico");
   chartInforme(rows);
+  chartEstadoGen(rows);
+  chartInformeGen(rows);
+  renderDetail(rows);
 }
 
 /* =====================================================================
