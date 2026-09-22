@@ -2,7 +2,7 @@
   "name": "Dashboard Servicios Críticos",
   "short_name": "Dashboard",
   "description": "Dashboard conectado a Excel de SharePoint",
-  "start_url": "./dashboard.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
