@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ruta de Servicios Críticos — Panel de análisis</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dashboard">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -173,9 +178,6 @@ button,input,select{font-family:inherit;font-size:inherit}
 .note{font-size:12px;color:var(--muted);margin-top:10px}
 #drop.drag{outline:2px dashed var(--azul);outline-offset:4px}
 </style>
-<link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#000000">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
 </head>
 <body id="drop">
 
@@ -1037,13 +1039,15 @@ setInterval(() => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") connectSharePoint(false);
 });
-</script>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./service-worker.js');
-    });
-  }
+
+// --- registro del service worker (necesario para que el navegador
+// considere la app "instalable" como PWA) ---
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js")
+      .catch((err) => console.error("Error registrando el service worker:", err));
+  });
+}
 </script>
 </body>
 </html>
