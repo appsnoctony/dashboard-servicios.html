@@ -295,7 +295,7 @@ const CONFIG = {
 };
 
 const SKIP_SHEETS = ["plantilla"];  // hojas que no son datos
-const AUTO_REFRESH_SECONDS = 900;    // frecuencia del refresco automático
+const AUTO_REFRESH_SECONDS = 30;    // frecuencia del refresco automático
 
 /* =====================================================================
    2. ESTADO Y UTILIDADES
@@ -937,7 +937,12 @@ function encodeShareUrl(url){
 }
 
 async function gget(url, token, extraHeaders){
-  const res = await fetch(url, { headers: Object.assign({ Authorization: "Bearer " + token }, extraHeaders || {}) });
+  // cache:"no-store" evita que el navegador reutilice una respuesta anterior en
+  // vez de pedirle a Microsoft Graph el estado más reciente del archivo.
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: Object.assign({ Authorization: "Bearer " + token }, extraHeaders || {})
+  });
   if (!res.ok){
     let detail = "";
     try { detail = (await res.json()).error.message; } catch {}
