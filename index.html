@@ -173,6 +173,9 @@ button,input,select{font-family:inherit;font-size:inherit}
 .note{font-size:12px;color:var(--muted);margin-top:10px}
 #drop.drag{outline:2px dashed var(--azul);outline-offset:4px}
 </style>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
 </head>
 <body id="drop">
 
@@ -1034,6 +1037,13 @@ setInterval(() => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") connectSharePoint(false);
 });
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js');
+    });
+  }
 </script>
 </body>
 </html>
