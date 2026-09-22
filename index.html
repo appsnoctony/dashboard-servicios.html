@@ -120,6 +120,13 @@ button,input,select{font-family:inherit;font-size:inherit}
 .head h2{margin:0;font-size:20px;font-weight:700;letter-spacing:-0.015em}
 .head p{margin:2px 0 0;color:var(--muted);font-size:13px}
 
+.chip-reset{
+  display:none;padding:6px 12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);
+  color:var(--slate);cursor:pointer;font-size:12px;
+}
+.chip-reset:hover{background:var(--paper)}
+
 .kpis-wrap{position:relative;margin-bottom:18px}
 .kpis{
   display:flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);
@@ -217,6 +224,7 @@ button,input,select{font-family:inherit;font-size:inherit}
         <h2 id="title">Sin datos</h2>
         <p id="subtitle">Cargue el libro para ver tendencias y comparativas.</p>
       </div>
+      <button class="chip-reset" id="btnSeriesReset" type="button">Restablecer series ocultas</button>
     </div>
 
     <div id="empty" class="empty">
@@ -242,7 +250,7 @@ button,input,select{font-family:inherit;font-size:inherit}
 
         <section class="panel">
           <h3>Ritmo semanal</h3>
-          <p class="sub">Servicios cerrados por semana, para ver picos y valles dentro del mes.</p>
+          <p class="sub">Servicios cerrados por semana (lunes a domingo), para ver picos y valles dentro del mes.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
@@ -286,6 +294,17 @@ button,input,select{font-family:inherit;font-size:inherit}
     </div>
   </main>
 </div>
+
+<!-- Registro del service worker, en bloque propio para que un fallo
+     de CDN nunca impida registrarlo -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .catch((err) => console.error('Error registrando el service worker:', err));
+  });
+}
+</script>
 
 <script>
 /* =====================================================================
@@ -550,10 +569,10 @@ function wirePicker(picker, def){
 
 document.addEventListener("click", () => document.querySelectorAll(".pop.open").forEach(p => p.classList.remove("open")));
 
-$("dFrom").addEventListener("change", e => { dateFrom = e.target.value ? new Date(e.target.value + "T00:00:00Z") : null; render(); });
-$("dTo").addEventListener("change",   e => { dateTo   = e.target.value ? new Date(e.target.value + "T23:59:59Z") : null; render(); });
+ $("dFrom").addEventListener("change", e => { dateFrom = e.target.value ? new Date(e.target.value + "T00:00:00Z") : null; render(); });
+ $("dTo").addEventListener("change",   e => { dateTo   = e.target.value ? new Date(e.target.value + "T23:59:59Z") : null; render(); });
 
-$("btnReset").addEventListener("click", () => {
+ $("btnReset").addEventListener("click", () => {
   Object.values(FILTERS).forEach(s => s.clear());
   dateFrom = dateTo = null;
   $("dFrom").value = $("dTo").value = "";
@@ -590,6 +609,76 @@ function sortedMonths(rows){
 }
 
 /* =====================================================================
+   6a. SERIES SINCRONIZADAS ENTRE GRÁFICAS
+   Ocultar/mostrar una serie en la leyenda (tipos, estados o departamentos)
+   recalcula todas las gráficas, KPIs y contadores con solo lo visible.
+   ===================================================================== */
+const SERIES_DIM = { tipo: "tipo", estado: "estado", depto: "depto" };
+
+// dimensión -> Set de valores visibles (null = todas visibles)
+const SERIES_VIS = { tipo: null, estado: null, depto: null };
+
+// valores presentes con el filtro actual del panel (lo llena render())
+let UNIVERSE = { tipo: new Set(), estado: new Set(), depto: new Set() };
+
+function applySeriesFilters(rows){
+  for (const dim of Object.keys(SERIES_VIS)){
+    const vis = SERIES_VIS[dim];
+    if (!vis) continue;
+    rows = rows.filter(r => vis.has(r[SERIES_DIM[dim]]));
+  }
+  return rows;
+}
+
+function toggleSeries(dim, value){
+  const all = UNIVERSE[dim];
+  let vis = SERIES_VIS[dim];
+  if (!vis){
+    vis = new Set(all);
+    vis.delete(value);
+  } else if (vis.has(value)){
+    vis.delete(value);
+  } else {
+    vis.add(value);
+  }
+  // si no queda nada oculto (o se ocultaron todas), vuelve a "todas visibles"
+  SERIES_VIS[dim] = (!all.size || vis.size === 0 || vis.size === all.size) ? null : vis;
+  render();
+}
+
+function seriesLegendClick(dim){
+  return (e, item) => toggleSeries(dim, item.text);
+}
+
+// la serie "Total" de la tendencia solo se oculta en su gráfica: no es un
+// tipo real, así que no filtra al resto del tablero
+function totalLegendClick(e, item, legend){
+  const chart = legend.chart;
+  if (chart.isDatasetVisible(item.datasetIndex)) chart.hide(item.datasetIndex);
+  else chart.show(item.datasetIndex);
+  chart.update();
+}
+
+// "2025-W23" -> "9 jun – 15 jun" (lunes a domingo de esa semana ISO)
+function weekRangeLabel(key, withYear){
+  const [y, w] = key.split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));   // el 4 de enero siempre cae en la semana ISO 1
+  const dow = jan4.getUTCDay() || 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - dow + 1 + (w - 1) * 7);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const fmt = d => d.getUTCDate() + " " + MESES[d.getUTCMonth()].slice(0,3).toLowerCase()
+                 + (withYear ? " " + String(d.getUTCFullYear()).slice(2) : "");
+  return fmt(monday) + " – " + fmt(sunday);
+}
+
+ $("btnSeriesReset").addEventListener("click", () => {
+  SERIES_VIS.tipo = SERIES_VIS.estado = SERIES_VIS.depto = null;
+  render();
+});
+
+/* =====================================================================
    6. GRÁFICAS
    ===================================================================== */
 Chart.defaults.font.family = "'Archivo',system-ui,sans-serif";
@@ -619,15 +708,17 @@ function baseScales(dark, stacked, xLabel, yLabel){
   };
 }
 
-function chartTrend(rows){
-  const months = sortedMonths(rows);
-  const tipos = topKeys(countBy(rows, r => r.tipo), 5);
+function chartTrend(universe, rows){
+  const months = sortedMonths(universe);
+  const tipos = topKeys(countBy(universe, r => r.tipo), 5);
+  const vis = SERIES_VIS.tipo;
   const datasets = tipos.map((t,i) => ({
     label:t,
     data: months.map(m => rows.filter(r => r.mes === m && r.tipo === t).length),
     borderColor: PALETTE[i % PALETTE.length],
     backgroundColor: PALETTE[i % PALETTE.length],
-    borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5
+    borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5,
+    hidden: vis ? !vis.has(t) : false
   }));
   datasets.unshift({
     label:"Total",
@@ -637,27 +728,40 @@ function chartTrend(rows){
   });
   draw("cTrend", { type:"line", data:{ labels: months.map(monthLabel), datasets },
     options:{ maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
-      plugins:{ legend:{ labels:{ color:"#D9E0E4", boxWidth:12, boxHeight:12 } } },
+      plugins:{ legend:{
+          onClick: (e, item, legend) => {
+            if (item.text === "Total"){ totalLegendClick(e, item, legend); return; }
+            toggleSeries("tipo", item.text);
+          },
+          labels:{ color:"#D9E0E4", boxWidth:12, boxHeight:12 } } },
       scales: baseScales(true, false, "Mes", "Servicios") } });
 }
 
-function chartWeek(rows){
-  const weeks = [...new Set(rows.map(r => r.sem).filter(Boolean))].sort();
-  draw("cWeek", { type:"line", data:{ labels:weeks.map(w => "S" + w.split("-W")[1]),
-      datasets:[{ label:"Servicios", data:weeks.map(w => rows.filter(r => r.sem === w).length),
-        borderColor:"#2B5F8C", backgroundColor:"rgba(43,95,140,.12)", fill:true, borderWidth:2, tension:.25, pointRadius:2 }] },
+function chartWeek(universe, rows){
+  const weeks = [...new Set(universe.map(r => r.sem).filter(Boolean))].sort();
+  const multiYear = new Set(weeks.map(w => w.split("-W")[0])).size > 1;
+  draw("cWeek", { type:"line",
+      data:{ labels: weeks.map(w => weekRangeLabel(w, multiYear)),
+        datasets:[{ label:"Servicios", data: weeks.map(w => rows.filter(r => r.sem === w).length),
+          borderColor:"#2B5F8C", backgroundColor:"rgba(43,95,140,.12)", fill:true, borderWidth:2, tension:.25, pointRadius:2 }] },
     options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
-      scales: baseScales(false, false, "Semana ISO del año", "Servicios cerrados") } });
+      scales:{
+        x:{ grid:{ display:false }, title: axisTitle("Semana (lunes a domingo)"),
+            ticks:{ autoSkip:true, maxRotation:60, maxTicksLimit:18 } },
+        y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados") } } } });
 }
 
-function chartEstado(rows){
-  const months = sortedMonths(rows);
-  const estados = [...new Set(rows.map(r => r.estado))];
+function chartEstado(universe, rows){
+  const months = sortedMonths(universe);
+  const estados = [...UNIVERSE.estado].sort((a,b) => a.localeCompare(b,"es"));
+  const vis = SERIES_VIS.estado;
   draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
       datasets: estados.map((e,i) => ({ label:e,
         data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
-        backgroundColor: ESTADO_COLOR[e] || PALETTE[i % PALETTE.length] })) },
-    options:{ maintainAspectRatio:false, plugins:{ legend:{ labels:{ boxWidth:12, boxHeight:12 } } },
+        backgroundColor: ESTADO_COLOR[e] || PALETTE[i % PALETTE.length],
+        hidden: vis ? !vis.has(e) : false })) },
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{ onClick: seriesLegendClick("estado"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales: baseScales(false, true, "Mes", "Servicios") } });
 }
 
@@ -670,15 +774,17 @@ function chartBarH(id, map, n, color, xLabel, yLabel){
                y:{ grid:{ display:false }, title: yLabel ? axisTitle(yLabel) : undefined } } } });
 }
 
-function chartCat(rows){
-  const cats = topKeys(countBy(rows, r => r.categoria), 10);
-  const deptos = [...new Set(rows.map(r => r.depto))];
+function chartCat(universe, rows){
+  const cats = topKeys(countBy(universe, r => r.categoria), 10);
+  const deptos = [...UNIVERSE.depto].sort((a,b) => a.localeCompare(b,"es"));
+  const vis = SERIES_VIS.depto;
   draw("cCat", { type:"bar", data:{ labels:cats,
       datasets: deptos.map((d,i) => ({ label:d,
         data: cats.map(c => rows.filter(r => r.categoria === c && r.depto === d).length),
-        backgroundColor: PALETTE[i % PALETTE.length] })) },
+        backgroundColor: PALETTE[i % PALETTE.length],
+        hidden: vis ? !vis.has(d) : false })) },
     options:{ indexAxis:"y", maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ boxWidth:12, boxHeight:12 } } },
+      plugins:{ legend:{ onClick: seriesLegendClick("depto"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales:{ x:{ stacked:true, beginAtZero:true, grid:gridLight, title: axisTitle("Servicios") },
                y:{ stacked:true, grid:{ display:false }, title: axisTitle("Categoría técnica") } } } });
 }
@@ -830,7 +936,14 @@ function renderQuality(rows){
    8. RENDER
    ===================================================================== */
 function render(){
-  const rows = filtered();
+  const panelRows = filtered();        // filtros del panel lateral
+  UNIVERSE = {
+    tipo:   new Set(panelRows.map(r => r.tipo)),
+    estado: new Set(panelRows.map(r => r.estado)),
+    depto:  new Set(panelRows.map(r => r.depto))
+  };
+  const rows = applySeriesFilters(panelRows);   // + series ocultas en leyendas
+
   $("title").textContent = rows.length
     ? rows.length.toLocaleString("es-CR") + " servicios en el filtro actual"
     : "Ningún servicio coincide con el filtro";
@@ -839,13 +952,17 @@ function render(){
     ? `Del ${f[0].toISOString().slice(0,10)} al ${f[f.length-1].toISOString().slice(0,10)} · ${RAW.length.toLocaleString("es-CR")} registros cargados`
     : `${RAW.length.toLocaleString("es-CR")} registros cargados`;
 
+  const resetBtn = $("btnSeriesReset");
+  if (resetBtn) resetBtn.style.display =
+    Object.values(SERIES_VIS).some(v => v && v.size) ? "block" : "none";
+
   renderKpis(rows);
   renderQuality(rows);
-  chartTrend(rows);
-  chartWeek(rows);
-  chartEstado(rows);
+  chartTrend(panelRows, rows);
+  chartWeek(panelRows, rows);
+  chartEstado(panelRows, rows);
   chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente");
-  chartCat(rows);
+  chartCat(panelRows, rows);
   chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico");
   chartInforme(rows);
 }
@@ -853,8 +970,8 @@ function render(){
 /* =====================================================================
    9. ORIGEN A: ARCHIVO LOCAL (SheetJS)
    ===================================================================== */
-$("btnLocal").addEventListener("click", () => $("fileInput").click());
-$("fileInput").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); });
+ $("btnLocal").addEventListener("click", () => $("fileInput").click());
+ $("fileInput").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); });
 
 const drop = $("drop");
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
@@ -1023,31 +1140,22 @@ async function connectSharePoint(interactive){
   }
 }
 
-$("btnSp").addEventListener("click", () => connectSharePoint(true));
-$("btnRefresh").addEventListener("click", () => connectSharePoint(true));
+ $("btnSp").addEventListener("click", () => connectSharePoint(true));
+ $("btnRefresh").addEventListener("click", () => connectSharePoint(true));
 
 // --- auto-conexión al abrir la página, si el navegador aún conserva la sesión ---
 window.addEventListener("load", () => { connectSharePoint(false); });
 
-// --- refresco automático cada 30 segundos mientras la pestaña esté visible ---
+// --- refresco automático cada 15 minutos mientras la pestaña esté visible ---
 setInterval(() => {
   if (document.visibilityState === "visible") connectSharePoint(false);
 }, AUTO_REFRESH_SECONDS * 1000);
 
 // si la pestaña estuvo en segundo plano, al volver a ella se refresca de inmediato
-// (en vez de esperar hasta el siguiente tic de 30 s, que pudo haber quedado a mitad)
+// (en vez de esperar hasta el siguiente tic del ciclo automático, que pudo haber quedado a mitad)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") connectSharePoint(false);
 });
-
-// --- registro del service worker (necesario para que el navegador
-// considere la app "instalable" como PWA) ---
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js")
-      .catch((err) => console.error("Error registrando el service worker:", err));
-  });
-}
 </script>
 </body>
 </html>
