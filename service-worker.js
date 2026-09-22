@@ -1,10 +1,10 @@
 const CACHE_NAME = 'dashboard-v1';
 
-// Solo archivos propios. OJO: no incluyo './' porque tu sitio no tiene
-// index.html en la raíz — si se precachea una URL que da 404, el
+// Solo archivos propios. Si se precachea una URL que da 404, el
 // service worker entero falla al instalarse.
 const ASSETS = [
-  './dashboard.html',
+  './',
+  './index.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
