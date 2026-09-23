@@ -262,19 +262,19 @@ table.detail tbody tr:hover{background:var(--paper)}
       <div class="grid">
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
+          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. La leyenda oculta o muestra cada tipo en todo el tablero.</p>
           <div class="cwrap"><canvas id="cTrend"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado de trabajos por mes</h3>
-          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado de informes por mes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
@@ -292,60 +292,60 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel tall">
           <h3>Clientes con mayor demanda</h3>
-          <p class="sub">Los 12 primeros del filtro activo. Haga clic en una barra para filtrar todo el tablero con ese cliente; clic de nuevo lo libera.</p>
+          <p class="sub">Los 12 primeros del filtro activo. Haga clic en una barra para ver únicamente ese cliente en todo el tablero; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cCliente"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Categoría técnica por departamento</h3>
-          <p class="sub">Dónde se concentra la especialidad. Haga clic en una barra para filtrar todo el tablero con esa categoría; la leyenda oculta departamentos. La fila "Sin categoría" agrupa filas donde el Excel no trae el dato.</p>
+          <p class="sub">Clic en una barra para ver únicamente esa categoría en todo el tablero (clic de nuevo libera); la leyenda oculta departamentos. La fila "Sin categoría" agrupa filas donde el Excel no trae el dato.</p>
           <div class="cwrap"><canvas id="cCat"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Carga por técnico</h3>
-          <p class="sub">Servicios asignados en el periodo filtrado. Haga clic en una barra para filtrar todo el tablero con ese técnico; clic de nuevo lo libera.</p>
+          <p class="sub">Servicios asignados en el periodo filtrado. Haga clic en una barra para ver únicamente ese técnico en todo el tablero; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cTec"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Trabajos por descripción</h3>
-          <p class="sub">Qué tipo de trabajo domina el periodo (Mtto preventivo, Mtto profundo, remplazos…). Haga clic en una barra para filtrar todo el tablero con ese trabajo; clic de nuevo la libera.</p>
+          <p class="sub">Qué tipo de trabajo domina el periodo. Haga clic en una barra para ver únicamente ese trabajo en todo el tablero; clic de nuevo lo libera. "Sin descripción" agrupa filas con ese campo vacío.</p>
           <div class="cwrap"><canvas id="cDesc"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Servicios por zona de gira</h3>
-          <p class="sub">Distribución operativa por zona dentro del filtro activo. Haga clic en una barra para filtrar todo el tablero con esa zona; clic de nuevo la libera.</p>
+          <p class="sub">Distribución operativa por zona dentro del filtro activo. Haga clic en una barra para ver únicamente esa zona en todo el tablero; clic de nuevo la libera.</p>
           <div class="cwrap"><canvas id="cZona"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Servicios por departamento</h3>
-          <p class="sub">Carga total por área. Haga clic en una barra para filtrar todo el tablero con ese departamento; clic de nuevo lo libera.</p>
+          <p class="sub">Carga total por área. Haga clic en una barra para ver únicamente ese departamento en todo el tablero; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cDepto"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>OT asignada</h3>
-          <p class="sub">Servicios con número de OT frente a los que no lo tienen registrado. Clic en un segmento o en la leyenda filtra todo el tablero — útil para aislar los registros incompletos.</p>
+          <p class="sub">Servicios con número de OT frente a los que no lo tienen registrado. Clic en un segmento para ver únicamente ese grupo en todo el tablero; la leyenda lo oculta o muestra.</p>
           <div class="cwrap"><canvas id="cOt"></canvas></div>
         </section>
 
         <section class="panel third">
           <h3>Estado general</h3>
-          <p class="sub">Distribución total del filtro activo. Clic en un segmento o en la leyenda retira ese estado de todo el tablero.</p>
+          <p class="sub">Distribución total del filtro activo. Clic en un segmento para ver únicamente ese estado en todo el tablero; la leyenda lo oculta o muestra.</p>
           <div class="cwrap"><canvas id="cEstadoGen"></canvas></div>
         </section>
 
         <section class="panel third">
           <h3>Estado de informes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Clic en un segmento o en la leyenda filtra todo el tablero.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Clic en un segmento para ver únicamente esa categoría en todo el tablero; la leyenda la oculta o muestra.</p>
           <div class="cwrap"><canvas id="cInfGen"></canvas></div>
         </section>
 
         <section class="panel third">
-          <h3>Completitud del registro</h3>
+          <h3>Porcentaje de registros completados</h3>
           <p class="sub">Qué tan lleno viene cada campo. Un campo vacío limita lo que este panel puede medir.</p>
           <ul class="qual" id="qual"></ul>
           <p class="note" id="qualNote"></p>
@@ -557,6 +557,7 @@ function ingest(matrix, sheetName){
     const estadoVal  = cleanNA(get("estado"))  || "Vacío";   // Vacío = campo sin llenar
     const informeVal = cleanNA(get("informe"));              // "" => Vacío en informeCat
     const otVal      = clean(get("ot"));
+    const descVal    = clean(get("desc"));
 
     const rec = {
       hoja: sheetName,
@@ -572,10 +573,10 @@ function ingest(matrix, sheetName){
       placa:    clean(get("placa")),
       ot:       otVal,
       otCat:    otVal ? "Con OT" : "Sin OT",
-      desc:     clean(get("desc")),
+      desc:     descVal || "Sin descripción",   // agrupa vacíos con etiqueta propia
       fecha, horas, horasMala,
       sinFechaMes: false,
-      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: otVal, desc: clean(get("desc")) }
+      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: otVal, desc: descVal }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
@@ -739,7 +740,7 @@ document.addEventListener("click", () => document.querySelectorAll(".pop.open").
   $("dFrom").value = $("dTo").value = "";
   document.querySelectorAll(".picker input[type=checkbox]").forEach(cb => cb.checked = false);
   document.querySelectorAll(".picker").forEach(p => p._sync && p._sync());
-  // también restablece las series ocultas desde las gráficas
+  // también restablece los aislamientos y series ocultas desde las gráficas
   for (const d of Object.keys(SERIES_VIS)) SERIES_VIS[d] = null;
   render();
 });
@@ -788,6 +789,10 @@ function orderedList(universe, order){
 
 /* =====================================================================
    6a. FILTRO CRUZADO DESDE LAS GRÁFICAS
+   Dos interacciones según dónde se haga clic:
+   - Barras y segmentos de dona = AISLAR: todo el tablero queda solo con
+     ese valor (clic de nuevo sobre él lo libera).
+   - Leyendas = OCULTAR/MOSTRAR: quita o devuelve valores individuales.
    ===================================================================== */
 const SERIES_DIM = {
   tipo:"tipo", estado:"estado", depto:"depto", informe:"informeCat",
@@ -816,6 +821,7 @@ function applySeriesFilters(rows){
   return rows;
 }
 
+// clic en leyenda: oculta/muestra el valor (toggle)
 function toggleSeries(dim, value){
   const all = UNIVERSE[dim];
   if (!all) return;
@@ -832,8 +838,27 @@ function toggleSeries(dim, value){
   render();
 }
 
+// clic en barra o segmento: aisla el valor; si ya está aislado, libera
+function isolateSeries(dim, value){
+  const cur = SERIES_VIS[dim];
+  if (cur && cur.size === 1 && cur.has(value)){
+    SERIES_VIS[dim] = null;          // segundo clic: liberar
+  } else {
+    SERIES_VIS[dim] = new Set([value]);  // primer clic: solo ese valor
+  }
+  render();
+}
+
 function seriesLegendClick(dim){
   return (e, item) => toggleSeries(dim, item.text);
+}
+
+// barra o segmento clicado -> aislar ese valor
+function isolateClick(dim){
+  return (e, els, chart) => {
+    if (!els.length) return;
+    isolateSeries(dim, chart.data.labels[els[0].index]);
+  };
 }
 
 function totalLegendClick(e, item, legend){
@@ -847,7 +872,7 @@ function pointerHover(e, els){
   if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
 }
 
-// "2025-W23" -> "9 jun – 15 jun" (lunes a domingo de esa semana ISO)
+// "2026-W23" -> "8 jun – 14 jun" (lunes a domingo de esa semana ISO)
 function weekRangeLabel(key, withYear){
   const [y, w] = key.split("-W").map(Number);
   const jan4 = new Date(Date.UTC(y, 0, 4));
@@ -970,12 +995,13 @@ function chartWeek(universe, rows){
         y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados") } } } });
 }
 
+// barras horizontales: clic en barra = aislar ese valor en todo el tablero
 function chartBarH(id, map, n, color, xLabel, yLabel, dim){
   const top = [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n);
   draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
       datasets:[{ data: top.map(e => e[1]), backgroundColor: color, borderRadius:2 }] },
     options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
-      onClick: dim ? (e, els, chart) => { if (els.length) toggleSeries(dim, chart.data.labels[els[0].index]); } : undefined,
+      onClick: dim ? isolateClick(dim) : undefined,
       onHover: dim ? pointerHover : undefined,
       scales:{ x:{ beginAtZero:true, grid:gridLight, title: xLabel ? axisTitle(xLabel) : undefined },
                y:{ grid:{ display:false }, title: yLabel ? axisTitle(yLabel) : undefined } } } });
@@ -991,7 +1017,7 @@ function chartCat(universe, rows){
         backgroundColor: PALETTE[i % PALETTE.length],
         hidden: vis ? !vis.has(d) : false })) },
     options:{ indexAxis:"y", maintainAspectRatio:false,
-      onClick: (e, els, chart) => { if (els.length) toggleSeries("categoria", chart.data.labels[els[0].index]); },
+      onClick: isolateClick("categoria"),
       onHover: pointerHover,
       plugins:{ legend:{ onClick: seriesLegendClick("depto"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales:{ x:{ stacked:true, beginAtZero:true, grid:gridLight, title: axisTitle("Servicios") },
@@ -1023,7 +1049,7 @@ function chartEstadoGen(rows){
         backgroundColor: estados.map(e => ESTADO_COLOR[e] || "#6B7680"),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
-      onClick: (e, els, chart) => { if (els.length) toggleSeries("estado", chart.data.labels[els[0].index]); },
+      onClick: isolateClick("estado"),
       onHover: pointerHover,
       plugins:{ legend:{ position:"right", onClick: seriesLegendClick("estado"),
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
@@ -1037,7 +1063,7 @@ function chartInformeGen(rows){
         backgroundColor: cats.map(c => INFORME_COLOR[c] || "#6B7680"),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
-      onClick: (e, els, chart) => { if (els.length) toggleSeries("informe", chart.data.labels[els[0].index]); },
+      onClick: isolateClick("informe"),
       onHover: pointerHover,
       plugins:{ legend:{ position:"right", onClick: seriesLegendClick("informe"),
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
@@ -1051,7 +1077,7 @@ function chartOtGen(rows){
         backgroundColor: cats.map(c => OT_COLOR[c] || "#6B7680"),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
-      onClick: (e, els, chart) => { if (els.length) toggleSeries("otCat", chart.data.labels[els[0].index]); },
+      onClick: isolateClick("otCat"),
       onHover: pointerHover,
       plugins:{ legend:{ position:"right", onClick: seriesLegendClick("otCat"),
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
@@ -1245,9 +1271,9 @@ function renderDetail(rows){
   $("detailBody").innerHTML = shown.map(r => `<tr>
     <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : "—"}</td>
     <td>${esc(r.cliente)}</td>
-    <td>${esc(r.ot) || "—"}</td>
+    <td>${esc(r._raw.ot) || "—"}</td>
     <td>${esc(r.tipo)}</td>
-    <td class="desc">${esc(r.desc) || "—"}</td>
+    <td class="desc">${esc(r._raw.desc) || "—"}</td>
     <td>${estadoTag(r.estado)}</td>
     <td>${informeTag(r.informeCat)}</td>
     <td>${esc(r.tecnico)}</td>
