@@ -308,6 +308,30 @@ table.detail tbody tr:hover{background:var(--paper)}
           <div class="cwrap"><canvas id="cTec"></canvas></div>
         </section>
 
+        <section class="panel tall">
+          <h3>Trabajos por descripción</h3>
+          <p class="sub">Qué tipo de trabajo domina el periodo (Mtto preventivo, Mtto profundo, remplazos…). Haga clic en una barra para filtrar todo el tablero con ese trabajo; clic de nuevo la libera.</p>
+          <div class="cwrap"><canvas id="cDesc"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Servicios por zona de gira</h3>
+          <p class="sub">Distribución operativa por zona dentro del filtro activo. Haga clic en una barra para filtrar todo el tablero con esa zona; clic de nuevo la libera.</p>
+          <div class="cwrap"><canvas id="cZona"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Servicios por departamento</h3>
+          <p class="sub">Carga total por área. Haga clic en una barra para filtrar todo el tablero con ese departamento; clic de nuevo lo libera.</p>
+          <div class="cwrap"><canvas id="cDepto"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>OT asignada</h3>
+          <p class="sub">Servicios con número de OT frente a los que no lo tienen registrado. Clic en un segmento o en la leyenda filtra todo el tablero — útil para aislar los registros incompletos.</p>
+          <div class="cwrap"><canvas id="cOt"></canvas></div>
+        </section>
+
         <section class="panel third">
           <h3>Estado general</h3>
           <p class="sub">Distribución total del filtro activo. Clic en un segmento o en la leyenda retira ese estado de todo el tablero.</p>
@@ -423,10 +447,12 @@ const ESTADO_COLOR = {
 const INFORME_COLOR = {
   "Entregado":"#2F6B4F","Pendiente":"#C48A16","N/A":"#9AA5AD","Vacío":"#C8102E","Otro":"#6B7680"
 };
+const OT_COLOR = { "Con OT":"#2F6B4F", "Sin OT":"#C8102E" };
 
 // orden canónico de las categorías en leyendas y donas
 const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
 const INFORME_ORDER = ["Entregado","Pendiente","N/A","Vacío","Otro"];
+const OT_ORDER = ["Con OT","Sin OT"];
 
 let RAW = [];
 const FILTERS = {};
@@ -530,6 +556,7 @@ function ingest(matrix, sheetName){
 
     const estadoVal  = cleanNA(get("estado"))  || "Vacío";   // Vacío = campo sin llenar
     const informeVal = cleanNA(get("informe"));              // "" => Vacío en informeCat
+    const otVal      = clean(get("ot"));
 
     const rec = {
       hoja: sheetName,
@@ -543,11 +570,12 @@ function ingest(matrix, sheetName){
       informeCat: informeCatOf(informeVal),
       zona:     clean(get("zona"))      || "Sin gira",
       placa:    clean(get("placa")),
-      ot:       clean(get("ot")),
+      ot:       otVal,
+      otCat:    otVal ? "Con OT" : "Sin OT",
       desc:     clean(get("desc")),
       fecha, horas, horasMala,
       sinFechaMes: false,
-      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: clean(get("ot")), desc: clean(get("desc")) }
+      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: otVal, desc: clean(get("desc")) }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
@@ -644,7 +672,7 @@ function buildFilters(){
     for (const v of values){
       const l = document.createElement("label");
       l.className = "opt";
-      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${v}</span><span class="n">${counts.get(v)}</span>`;
+      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${esc(v)}</span><span class="n">${counts.get(v)}</span>`;
       opts.appendChild(l);
     }
     host.appendChild(g);
@@ -763,14 +791,20 @@ function orderedList(universe, order){
    ===================================================================== */
 const SERIES_DIM = {
   tipo:"tipo", estado:"estado", depto:"depto", informe:"informeCat",
-  cliente:"cliente", tecnico:"tecnico", categoria:"categoria"
+  cliente:"cliente", tecnico:"tecnico", categoria:"categoria",
+  desc:"desc", zona:"zona", otCat:"otCat"
 };
 
-const SERIES_VIS = { tipo:null, estado:null, depto:null, informe:null, cliente:null, tecnico:null, categoria:null };
+const SERIES_VIS = {
+  tipo:null, estado:null, depto:null, informe:null,
+  cliente:null, tecnico:null, categoria:null,
+  desc:null, zona:null, otCat:null
+};
 
 let UNIVERSE = {
   tipo:new Set(), estado:new Set(), depto:new Set(), informe:new Set(),
-  cliente:new Set(), tecnico:new Set(), categoria:new Set()
+  cliente:new Set(), tecnico:new Set(), categoria:new Set(),
+  desc:new Set(), zona:new Set(), otCat:new Set()
 };
 
 function applySeriesFilters(rows){
@@ -1009,6 +1043,20 @@ function chartInformeGen(rows){
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
 }
 
+function chartOtGen(rows){
+  const cats = orderedList(UNIVERSE.otCat, OT_ORDER);
+  draw("cOt", { type:"doughnut",
+    data:{ labels: cats,
+      datasets:[{ data: cats.map(c => rows.filter(r => r.otCat === c).length),
+        backgroundColor: cats.map(c => OT_COLOR[c] || "#6B7680"),
+        borderColor:"#FFFFFF", borderWidth:2 }] },
+    options:{ maintainAspectRatio:false, cutout:"55%",
+      onClick: (e, els, chart) => { if (els.length) toggleSeries("otCat", chart.data.labels[els[0].index]); },
+      onHover: pointerHover,
+      plugins:{ legend:{ position:"right", onClick: seriesLegendClick("otCat"),
+                 labels:{ boxWidth:12, boxHeight:12 } } } } });
+}
+
 /* =====================================================================
    7. KPIs Y CALIDAD
    ===================================================================== */
@@ -1221,7 +1269,10 @@ function render(){
     informe:  new Set(panelRows.map(r => r.informeCat)),
     cliente:  new Set(panelRows.map(r => r.cliente)),
     tecnico:  new Set(panelRows.map(r => r.tecnico)),
-    categoria:new Set(panelRows.map(r => r.categoria))
+    categoria:new Set(panelRows.map(r => r.categoria)),
+    desc:     new Set(panelRows.map(r => r.desc)),
+    zona:     new Set(panelRows.map(r => r.zona)),
+    otCat:    new Set(panelRows.map(r => r.otCat))
   };
   const rows = applySeriesFilters(panelRows);   // + clics en las gráficas
 
@@ -1247,6 +1298,10 @@ function render(){
   chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente", "cliente");
   chartCat(panelRows, rows);
   chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico", "tecnico");
+  chartBarH("cDesc", countBy(rows, r => r.desc), 12, "#6B4E7D", "Servicios", "Tipo de trabajo", "desc");
+  chartBarH("cZona", countBy(rows, r => r.zona), 10, "#1F7A78", "Servicios", "Zona de gira", "zona");
+  chartBarH("cDepto", countBy(rows, r => r.depto), 10, "#8A5A3B", "Servicios", "Departamento", "depto");
+  chartOtGen(rows);
   chartEstadoGen(rows);
   chartInformeGen(rows);
   renderSinFecha(rows);
