@@ -262,19 +262,19 @@ table.detail tbody tr:hover{background:var(--paper)}
       <div class="grid">
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Solo incluye registros con "Fecha de visita". Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
+          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cTrend"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado por mes</h3>
-          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Solo incluye registros con "Fecha de visita". Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Informe por mes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Solo incluye registros con "Fecha de visita". Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
@@ -328,12 +328,12 @@ table.detail tbody tr:hover{background:var(--paper)}
         </section>
 
         <section class="panel wide">
-          <h3>Registros sin fecha, por pestaña</h3>
-          <p class="sub">Tabla de diagnóstico: filas cuya "Fecha de visita" está vacía o no es reconocible, agrupadas por la pestaña del Excel donde están. No afecta ninguna gráfica — solo sirve para saber qué corregir en el Excel.</p>
+          <h3>Registros sin fecha, por mes</h3>
+          <p class="sub">Filas cuya "Fecha de visita" está vacía o no es reconocible: el dashboard les asigna el mes de su pestaña para que no se pierdan de las gráficas. Se corrigen solas al digitar la fecha en el Excel.</p>
           <div class="table-wrap compact">
             <table class="detail">
               <thead>
-                <tr><th>Pestaña</th><th>Sin fecha</th><th>Total de la pestaña</th></tr>
+                <tr><th>Mes</th><th>Sin fecha</th><th>Total del mes</th></tr>
               </thead>
               <tbody id="sinFechaBody"></tbody>
             </table>
@@ -399,6 +399,19 @@ const COLS = {
 };
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// nombres de pestaña -> número de mes (acepta "Setiembre" y mayúsculas/acentos)
+const MES_SHEET = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7,
+                    agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12 };
+
+function sheetMonthOf(name){
+  const s = norm(name).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  for (const [k,m] of Object.entries(MES_SHEET)){
+    if (s.startsWith(k)) return m;
+  }
+  return null;
+}
 
 const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75"];
 
@@ -486,6 +499,11 @@ function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3
 
 /* =====================================================================
    3. NORMALIZACIÓN DE FILAS
+   Si una fila no tiene "Fecha de visita" pero su pestaña es un mes
+   (Junio, Julio, Setiembre…), se le asigna ese mes como respaldo,
+   con el año más frecuente entre las filas de esa misma pestaña.
+   La fila marca sinFechaMes=true y se corrige sola cuando el Excel
+   tenga la fecha real.
    ===================================================================== */
 function ingest(matrix, sheetName){
   if (!matrix || matrix.length < 2) return [];
@@ -495,6 +513,7 @@ function ingest(matrix, sheetName){
     const want = label.replace(/\s+/g," ").toLowerCase();
     idx[key] = headers.findIndex(h => h.toLowerCase() === want);
   }
+  const sheetMonth = sheetMonthOf(sheetName);
   const out = [];
   for (let r = 1; r < matrix.length; r++){
     const row = matrix[r];
@@ -527,13 +546,37 @@ function ingest(matrix, sheetName){
       ot:       clean(get("ot")),
       desc:     clean(get("desc")),
       fecha, horas, horasMala,
+      sinFechaMes: false,
       _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: clean(get("ot")), desc: clean(get("desc")) }
     };
-    // comportamiento original: solo filas con fecha válida tienen mes.
-    // Sin fecha => no aparecen en las gráficas mensuales.
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
     out.push(rec);
+  }
+
+  // respaldo de mes por pestaña, solo para filas sin fecha
+  if (sheetMonth && out.length){
+    const years = new Map();
+    for (const rec of out){
+      if (rec.fecha){
+        const y = rec.fecha.getUTCFullYear();
+        years.set(y, (years.get(y) || 0) + 1);
+      }
+    }
+    if (years.size){
+      // año más frecuente en esta pestaña (desempate: el mayor)
+      let yDom = null, best = -1;
+      for (const [y,c] of years){
+        if (c > best || (c === best && yDom !== null && y > yDom)){ yDom = y; best = c; }
+      }
+      const mesKey = yDom + "-" + String(sheetMonth).padStart(2,"0");
+      for (const rec of out){
+        if (!rec.fecha){
+          rec.mes = mesKey;
+          rec.sinFechaMes = true;   // conserva semana null y fecha null a propósito
+        }
+      }
+    }
   }
   return out;
 }
@@ -601,7 +644,7 @@ function buildFilters(){
     for (const v of values){
       const l = document.createElement("label");
       l.className = "opt";
-      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${esc(v)}</span><span class="n">${counts.get(v)}</span>`;
+      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${v}</span><span class="n">${counts.get(v)}</span>`;
       opts.appendChild(l);
     }
     host.appendChild(g);
@@ -679,8 +722,19 @@ function filtered(){
       const sel = FILTERS[def.key];
       if (sel && sel.size && !sel.has(def.get(r))) return false;
     }
-    if (dateFrom && (!r.fecha || r.fecha < dateFrom)) return false;
-    if (dateTo   && (!r.fecha || r.fecha > dateTo))   return false;
+    if (dateFrom || dateTo){
+      if (r.fecha){
+        if (dateFrom && r.fecha < dateFrom) return false;
+        if (dateTo   && r.fecha > dateTo)   return false;
+      } else if (r.mes){
+        // fila con mes de respaldo (pestaña): se incluye si su mes se cruza con el rango
+        const [y,m] = r.mes.split("-").map(Number);
+        if (dateFrom && Date.UTC(y, m, 0, 23,59,59,999) < dateFrom.getTime()) return false;
+        if (dateTo   && Date.UTC(y, m-1, 1) > dateTo.getTime()) return false;
+      } else {
+        return false;
+      }
+    }
     return true;
   });
 }
@@ -1080,30 +1134,38 @@ function renderQuality(rows){
 }
 
 /* =====================================================================
-   7b. REGISTROS SIN FECHA, POR PESTAÑA (solo diagnóstico)
+   7b. REGISTROS SIN FECHA, POR MES
    ===================================================================== */
 function renderSinFecha(rows){
-  const byHoja = new Map();
+  const byMes = new Map();
+  let sinMes = 0;
   for (const r of rows){
-    if (r.mes) continue;
-    byHoja.set(r.hoja, (byHoja.get(r.hoja) || 0) + 1);
+    if (!r.sinFechaMes) continue;
+    if (r.mes) byMes.set(r.mes, (byMes.get(r.mes) || 0) + 1);
+    else sinMes++;
   }
+  const keys = [...byMes.keys()].sort();
 
-  if (!byHoja.size){
+  if (!keys.length && !sinMes){
     $("sinFechaBody").innerHTML =
       '<tr><td colspan="3" style="color:var(--verde)">✓ Todos los registros del filtro actual tienen fecha de visita.</td></tr>';
     $("sinFechaNote").textContent = "";
     return;
   }
 
-  const hojas = [...byHoja.keys()].sort((a,b) => a.localeCompare(b,"es"));
-  $("sinFechaBody").innerHTML = hojas.map(h =>
-    `<tr><td>${esc(h)}</td><td>${byHoja.get(h)}</td><td>${rows.filter(r => r.hoja === h).length.toLocaleString("es-CR")}</td></tr>`
-  ).join("");
+  let html = "";
+  for (const k of keys){
+    const totalMes = rows.filter(r => r.mes === k).length;
+    html += `<tr><td>${monthLabel(k)}</td><td>${byMes.get(k)}</td><td>${totalMes.toLocaleString("es-CR")}</td></tr>`;
+  }
+  if (sinMes){
+    html += `<tr><td>Sin mes identificable</td><td>${sinMes}</td><td>${rows.filter(r => !r.mes).length.toLocaleString("es-CR")}</td></tr>`;
+  }
+  $("sinFechaBody").innerHTML = html;
 
-  const total = [...byHoja.values()].reduce((a,b) => a+b, 0);
+  const total = [...byMes.values()].reduce((a,b) => a+b, 0) + sinMes;
   $("sinFechaNote").textContent =
-    `${total.toLocaleString("es-CR")} registro(s) sin fecha en el filtro actual. Estos registros no aparecen en las gráficas mensuales; se integran solas cuando se digite la "Fecha de visita" real en el Excel.`;
+    `${total.toLocaleString("es-CR")} registro(s) sin fecha en el filtro actual. El mes proviene de la pestaña del Excel y se corrige automáticamente al digitar la "Fecha de visita" real.`;
 }
 
 /* =====================================================================
