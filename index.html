@@ -262,25 +262,25 @@ table.detail tbody tr:hover{background:var(--paper)}
       <div class="grid">
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Las filas sin "Fecha de visita" aparecen al final como "Sin fecha". Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
+          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Solo incluye registros con "Fecha de visita". Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cTrend"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado por mes</h3>
-          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Las filas sin fecha aparecen como "Sin fecha" al final. Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Solo incluye registros con "Fecha de visita". Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Informe por mes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Las filas sin fecha aparecen como "Sin fecha" al final. Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Solo incluye registros con "Fecha de visita". Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Ritmo semanal</h3>
-          <p class="sub">Servicios cerrados por semana (lunes a domingo), para ver picos y valles dentro del mes. Solo incluye registros con fecha.</p>
+          <p class="sub">Servicios cerrados por semana (lunes a domingo), para ver picos y valles dentro del mes.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
@@ -329,7 +329,7 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel wide">
           <h3>Registros sin fecha, por pestaña</h3>
-          <p class="sub">Filas cuya "Fecha de visita" está vacía o no es reconocible, agrupadas por la pestaña del Excel donde están, para saber dónde corregirlas. No se les asigna ningún mes en las gráficas — aparecen como "Sin fecha". Se corrigen solas al digitar la fecha real.</p>
+          <p class="sub">Tabla de diagnóstico: filas cuya "Fecha de visita" está vacía o no es reconocible, agrupadas por la pestaña del Excel donde están. No afecta ninguna gráfica — solo sirve para saber qué corregir en el Excel.</p>
           <div class="table-wrap compact">
             <table class="detail">
               <thead>
@@ -415,10 +415,6 @@ const INFORME_COLOR = {
 const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
 const INFORME_ORDER = ["Entregado","Pendiente","N/A","Vacío","Otro"];
 
-// clave del grupo del eje para filas sin fecha (siempre al final del eje)
-const SIN_FECHA_KEY = "SIN-FECHA";
-const SIN_FECHA_LABEL = "Sin fecha";
-
 let RAW = [];
 const FILTERS = {};
 let dateFrom = null, dateTo = null;
@@ -488,15 +484,6 @@ function isoWeekKey(d){
 function monthKey(d){ return d.getUTCFullYear() + "-" + String(d.getUTCMonth()+1).padStart(2,"0"); }
 function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3) + " " + y.slice(2); }
 
-// clave del eje mensual: mes real o "Sin fecha" (siempre al final)
-function axisKeyOf(r){ return r.mes || SIN_FECHA_KEY; }
-function axisLabelOf(k){ return k === SIN_FECHA_KEY ? SIN_FECHA_LABEL : monthLabel(k); }
-function buildAxis(rows){
-  const months = [...new Set(rows.map(r => r.mes).filter(Boolean))].sort();
-  const hasSinFecha = rows.some(r => !r.mes);
-  return hasSinFecha ? [...months, SIN_FECHA_KEY] : months;
-}
-
 /* =====================================================================
    3. NORMALIZACIÓN DE FILAS
    ===================================================================== */
@@ -542,7 +529,9 @@ function ingest(matrix, sheetName){
       fecha, horas, horasMala,
       _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: clean(get("ot")), desc: clean(get("desc")) }
     };
-    rec.mes  = fecha ? monthKey(fecha)  : null;   // null = sin fecha => grupo "Sin fecha"
+    // comportamiento original: solo filas con fecha válida tienen mes.
+    // Sin fecha => no aparecen en las gráficas mensuales.
+    rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
     out.push(rec);
   }
@@ -566,8 +555,7 @@ function loadRows(rows){
    4. FILTROS
    ===================================================================== */
 const FILTER_DEFS = [
-  { key:"mes",      label:"Mes",          get:axisKeyOf, sortKey:r => r.mes || "9999",
-    labelOf:k => k === SIN_FECHA_KEY ? SIN_FECHA_LABEL : monthLabel(k) },
+  { key:"mes",      label:"Mes",          get:r => r.mes ? monthLabel(r.mes) : "Sin fecha", sortKey:r => r.mes || "9999" },
   { key:"cliente",  label:"Cliente",      get:r => r.cliente },
   { key:"tipo",     label:"Tipo de servicio", get:r => r.tipo },
   { key:"categoria",label:"Categoría",    get:r => r.categoria },
@@ -591,10 +579,9 @@ function buildFilters(){
       if (def.sortKey) order.set(v, def.sortKey(r));
     }
     let values = [...counts.keys()];
-    const toText = def.labelOf || (v => v);
     values.sort(def.sortKey
       ? (a,b) => String(order.get(a)).localeCompare(String(order.get(b)))
-      : (a,b) => counts.get(b) - counts.get(a) || toText(a).localeCompare(toText(b),"es"));
+      : (a,b) => counts.get(b) - counts.get(a) || a.localeCompare(b,"es"));
 
     for (const s of [...FILTERS[def.key]]) if (!counts.has(s)) FILTERS[def.key].delete(s);
 
@@ -614,15 +601,15 @@ function buildFilters(){
     for (const v of values){
       const l = document.createElement("label");
       l.className = "opt";
-      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${esc(toText(v))}</span><span class="n">${counts.get(v)}</span>`;
+      l.innerHTML = `<input type="checkbox" value="${v.replace(/"/g,"&quot;")}"><span>${esc(v)}</span><span class="n">${counts.get(v)}</span>`;
       opts.appendChild(l);
     }
     host.appendChild(g);
-    wirePicker(g.querySelector(".picker"), def, toText);
+    wirePicker(g.querySelector(".picker"), def);
   }
 }
 
-function wirePicker(picker, def, toText){
+function wirePicker(picker, def){
   const btn = picker.querySelector(".picker-btn");
   const pop = picker.querySelector(".pop");
   const search = pop.querySelector("input[type=search]");
@@ -663,7 +650,7 @@ function wirePicker(picker, def, toText){
     const sel = FILTERS[def.key];
     const label = btn.querySelector(".val");
     if (sel.size === 0){ label.textContent = "Todos"; label.classList.add("all"); }
-    else if (sel.size === 1){ label.textContent = toText([...sel][0]); label.classList.remove("all"); }
+    else if (sel.size === 1){ label.textContent = [...sel][0]; label.classList.remove("all"); }
     else { label.textContent = sel.size + " seleccionados"; label.classList.remove("all"); }
   }
   picker._sync = sync;
@@ -708,6 +695,9 @@ function countBy(rows, fn){
 }
 function topKeys(map, n){
   return [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n).map(e => e[0]);
+}
+function sortedMonths(rows){
+  return [...new Set(rows.map(r => r.mes).filter(Boolean))].sort();
 }
 function orderedList(universe, order){
   const rest = [...universe].filter(v => !order.includes(v)).sort((a,b) => a.localeCompare(b,"es"));
@@ -822,12 +812,12 @@ function baseScales(dark, stacked, xLabel, yLabel){
 }
 
 function chartTrend(universe, rows){
-  const axis = buildAxis(universe);
+  const months = sortedMonths(universe);
   const tipos = topKeys(countBy(universe, r => r.tipo), 5);
   const vis = SERIES_VIS.tipo;
   const datasets = tipos.map((t,i) => ({
     label:t,
-    data: axis.map(k => rows.filter(r => axisKeyOf(r) === k && r.tipo === t).length),
+    data: months.map(m => rows.filter(r => r.mes === m && r.tipo === t).length),
     borderColor: PALETTE[i % PALETTE.length],
     backgroundColor: PALETTE[i % PALETTE.length],
     borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5,
@@ -835,11 +825,11 @@ function chartTrend(universe, rows){
   }));
   datasets.unshift({
     label:"Total",
-    data: axis.map(k => rows.filter(r => axisKeyOf(r) === k).length),
+    data: months.map(m => rows.filter(r => r.mes === m).length),
     borderColor:"#F3F5F4", backgroundColor:"rgba(243,245,244,.10)",
     borderWidth:2.5, borderDash:[5,3], fill:true, tension:.28, pointRadius:3
   });
-  draw("cTrend", { type:"line", data:{ labels: axis.map(axisLabelOf), datasets },
+  draw("cTrend", { type:"line", data:{ labels: months.map(monthLabel), datasets },
     options:{ maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
       plugins:{ legend:{
           onClick: (e, item, legend) => {
@@ -851,12 +841,12 @@ function chartTrend(universe, rows){
 }
 
 function chartEstado(universe, rows){
-  const axis = buildAxis(universe);
+  const months = sortedMonths(universe);
   const estados = orderedList(UNIVERSE.estado, ESTADO_ORDER);
   const vis = SERIES_VIS.estado;
-  draw("cEstado", { type:"bar", data:{ labels:axis.map(axisLabelOf),
+  draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
       datasets: estados.map(e => ({ label:e,
-        data: axis.map(k => rows.filter(r => axisKeyOf(r) === k && r.estado === e).length),
+        data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
         backgroundColor: ESTADO_COLOR[e] || "#6B7680",
         hidden: vis ? !vis.has(e) : false })) },
     options:{ maintainAspectRatio:false,
@@ -865,12 +855,12 @@ function chartEstado(universe, rows){
 }
 
 function chartInformeMes(universe, rows){
-  const axis = buildAxis(universe);
+  const months = sortedMonths(universe);
   const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
   const vis = SERIES_VIS.informe;
-  draw("cInfMes", { type:"bar", data:{ labels:axis.map(axisLabelOf),
+  draw("cInfMes", { type:"bar", data:{ labels:months.map(monthLabel),
       datasets: cats.map((c,i) => ({ label:c,
-        data: axis.map(k => rows.filter(r => axisKeyOf(r) === k && r.informeCat === c).length),
+        data: months.map(m => rows.filter(r => r.mes === m && r.informeCat === c).length),
         backgroundColor: INFORME_COLOR[c] || PALETTE[i % PALETTE.length],
         hidden: vis ? !vis.has(c) : false })) },
     options:{ maintainAspectRatio:false,
@@ -921,13 +911,13 @@ function chartCat(universe, rows){
 }
 
 function chartInforme(rows){
-  const axis = buildAxis(rows);
-  const pct = axis.map(k => {
-    const con = rows.filter(r => axisKeyOf(r) === k && r.informe);
+  const months = sortedMonths(rows);
+  const pct = months.map(m => {
+    const con = rows.filter(r => r.mes === m && r.informe);
     if (!con.length) return null;
     return Math.round(con.filter(r => /entregad/i.test(r.informe)).length / con.length * 1000) / 10;
   });
-  draw("cInf", { type:"line", data:{ labels:axis.map(axisLabelOf),
+  draw("cInf", { type:"line", data:{ labels:months.map(monthLabel),
       datasets:[{ label:"% entregado", data:pct, borderColor:"#2F6B4F",
         backgroundColor:"rgba(47,107,79,.12)", fill:true, borderWidth:2, tension:.25,
         pointRadius:4, spanGaps:true }] },
@@ -1090,7 +1080,7 @@ function renderQuality(rows){
 }
 
 /* =====================================================================
-   7b. REGISTROS SIN FECHA, POR PESTAÑA
+   7b. REGISTROS SIN FECHA, POR PESTAÑA (solo diagnóstico)
    ===================================================================== */
 function renderSinFecha(rows){
   const byHoja = new Map();
@@ -1113,7 +1103,7 @@ function renderSinFecha(rows){
 
   const total = [...byHoja.values()].reduce((a,b) => a+b, 0);
   $("sinFechaNote").textContent =
-    `${total.toLocaleString("es-CR")} registro(s) sin fecha en el filtro actual. En las gráficas mensuales aparecen como "${SIN_FECHA_LABEL}" y no se les asigna ningún mes. Se corrigen solos al digitar la "Fecha de visita" real en el Excel.`;
+    `${total.toLocaleString("es-CR")} registro(s) sin fecha en el filtro actual. Estos registros no aparecen en las gráficas mensuales; se integran solas cuando se digite la "Fecha de visita" real en el Excel.`;
 }
 
 /* =====================================================================
