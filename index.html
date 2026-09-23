@@ -189,6 +189,7 @@ table.detail th{
 }
 table.detail td{padding:6px 9px;border-top:1px solid var(--line);vertical-align:top}
 table.detail td.desc{min-width:240px;max-width:420px}
+table.detail td.coment{min-width:200px;max-width:360px}
 table.detail tbody tr:hover{background:var(--paper)}
 .tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
 .tag.ok{background:rgba(47,107,79,.14);color:var(--verde)}
@@ -298,19 +299,19 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel tall">
           <h3>Categoría técnica por departamento</h3>
-          <p class="sub">Clic en una barra para ver únicamente esa categoría en todo el tablero (clic de nuevo libera); la leyenda oculta departamentos. La fila "Sin categoría" agrupa filas donde el Excel no trae el dato.</p>
+          <p class="sub">Clic en una barra para ver únicamente esa categoría en todo el tablero (clic de nuevo libera); la leyenda oculta departamentos. La fila "Vacío" agrupa registros sin ese dato; "N/A" respeta lo digitado en el Excel.</p>
           <div class="cwrap"><canvas id="cCat"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Carga por técnico</h3>
-          <p class="sub">Servicios asignados en el periodo filtrado. Haga clic en una barra para ver únicamente ese técnico en todo el tablero; clic de nuevo lo libera.</p>
+          <p class="sub">Todos los técnicos y colaboradores con servicios en el periodo filtrado, del que más tiene al que menos. Haga clic en una barra para ver únicamente esa persona en todo el tablero; clic de nuevo la libera.</p>
           <div class="cwrap"><canvas id="cTec"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Trabajos por descripción</h3>
-          <p class="sub">Qué tipo de trabajo domina el periodo. Haga clic en una barra para ver únicamente ese trabajo en todo el tablero; clic de nuevo lo libera. "Sin descripción" agrupa filas con ese campo vacío.</p>
+          <p class="sub">Qué tipo de trabajo domina el periodo. Haga clic en una barra para ver únicamente ese trabajo en todo el tablero; clic de nuevo lo libera. "Vacío" agrupa registros sin descripción; "N/A" respeta lo digitado en el Excel.</p>
           <div class="cwrap"><canvas id="cDesc"></canvas></div>
         </section>
 
@@ -345,7 +346,7 @@ table.detail tbody tr:hover{background:var(--paper)}
         </section>
 
         <section class="panel third">
-          <h3>Porcentaje de registros completados</h3>
+          <h3>Completitud del registro</h3>
           <p class="sub">Qué tan lleno viene cada campo. Un campo vacío limita lo que este panel puede medir.</p>
           <ul class="qual" id="qual"></ul>
           <p class="note" id="qualNote"></p>
@@ -367,13 +368,13 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel wide">
           <h3>Detalle de servicios</h3>
-          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Las etiquetas muestran de inmediato qué está completado, pendiente, N/A o vacío.</p>
+          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Los campos se muestran tal como vienen del Excel: "N/A" se muestra tal cual y los campos vacíos quedan en blanco. Las etiquetas de Estado e Informe muestran de inmediato qué está completado, pendiente, N/A o vacío.</p>
           <div class="table-wrap">
             <table class="detail">
               <thead>
                 <tr>
                   <th>Fecha</th><th>Cliente</th><th>OT</th><th>Tipo</th>
-                  <th>Descripción</th><th>Estado</th><th>Informe</th><th>Técnico</th>
+                  <th>Descripción</th><th>Estado</th><th>Informe</th><th>Técnico</th><th>Comentarios</th>
                 </tr>
               </thead>
               <tbody id="detailBody"></tbody>
@@ -461,7 +462,7 @@ const charts = {};
 
 const norm = v => (v === null || v === undefined) ? "" : String(v).trim();
 const clean = v => { const s = norm(v); return (!s || s.toUpperCase() === "N/A" || s === "-") ? "" : s; };
-// igual que clean, pero PRESERVA "N/A" como categoría propia (Estado e Informe)
+// preserva "N/A" como texto propio (Estado, Informe y todos los campos de texto)
 const cleanNA = v => { const s = norm(v); if (!s || s === "-") return ""; if (s.toUpperCase() === "N/A") return "N/A"; return s; };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -525,11 +526,11 @@ function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3
 
 /* =====================================================================
    3. NORMALIZACIÓN DE FILAS
-   Si una fila no tiene "Fecha de visita" pero su pestaña es un mes
-   (Junio, Julio, Setiembre…), se le asigna ese mes como respaldo,
-   con el año más frecuente entre las filas de esa misma pestaña.
-   La fila marca sinFechaMes=true y se corrige sola cuando el Excel
-   tenga la fecha real.
+   Los campos de texto conservan lo digitado en el Excel: "N/A" se queda
+   como "N/A" y los vacíos quedan vacíos en _raw (para las tablas).
+   Para las gráficas, los vacíos se agrupan con la etiqueta "Vacío".
+   Si una fila no tiene "Fecha de visita" pero su pestaña es un mes,
+   se le asigna ese mes como respaldo (se corrige sola al digitarla).
    ===================================================================== */
 function ingest(matrix, sheetName){
   if (!matrix || matrix.length < 2) return [];
@@ -554,29 +555,41 @@ function ingest(matrix, sheetName){
       if (d > 0 && d <= 16) horas = d; else horasMala = true;
     }
 
-    const estadoVal  = cleanNA(get("estado"))  || "Vacío";   // Vacío = campo sin llenar
-    const informeVal = cleanNA(get("informe"));              // "" => Vacío en informeCat
-    const otVal      = clean(get("ot"));
-    const descVal    = clean(get("desc"));
+    // valores crudos: "N/A" se preserva; vacío queda vacío
+    const clienteVal = cleanNA(get("cliente"));
+    const tipoVal    = cleanNA(get("tipo"));
+    const catVal     = cleanNA(get("categoria"));
+    const deptoVal   = cleanNA(get("depto"));
+    const tecnicoVal = cleanNA(get("tecnico"));
+    const zonaVal    = cleanNA(get("zona"));
+    const estadoVal  = cleanNA(get("estado"));
+    const informeVal = cleanNA(get("informe"));
+    const otVal      = cleanNA(get("ot"));
+    const descVal    = cleanNA(get("desc"));
+    const comentVal  = cleanNA(get("coment"));
 
     const rec = {
       hoja: sheetName,
-      cliente:  clean(get("cliente"))   || "Sin cliente",
-      tipo:     clean(get("tipo"))      || "Sin tipo",
-      categoria:clean(get("categoria")) || "Sin categoría",
-      depto:    clean(get("depto"))     || "Sin departamento",
-      tecnico:  clean(get("tecnico"))   || "Sin asignar",
-      estado:   estadoVal,
+      // etiquetas para gráficas y filtros (vacío -> "Vacío")
+      cliente:  clienteVal || "Vacío",
+      tipo:     tipoVal    || "Vacío",
+      categoria:catVal     || "Vacío",
+      depto:    deptoVal   || "Vacío",
+      tecnico:  tecnicoVal || "Vacío",
+      estado:   estadoVal  || "Vacío",
       informe:  informeVal,
       informeCat: informeCatOf(informeVal),
-      zona:     clean(get("zona"))      || "Sin gira",
+      zona:     zonaVal    || "Vacío",
       placa:    clean(get("placa")),
       ot:       otVal,
-      otCat:    otVal ? "Con OT" : "Sin OT",
-      desc:     descVal || "Sin descripción",   // agrupa vacíos con etiqueta propia
+      otCat:    (otVal && otVal !== "N/A") ? "Con OT" : "Sin OT",
+      desc:     descVal    || "Vacío",
       fecha, horas, horasMala,
       sinFechaMes: false,
-      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: otVal, desc: descVal }
+      // valores crudos para las tablas (vacío = celda vacía, N/A = "N/A")
+      _raw: { cliente: clienteVal, tipo: tipoVal, categoria: catVal, depto: deptoVal,
+              tecnico: tecnicoVal, zona: zonaVal, cierre: clean(get("cierre")),
+              informe: informeVal, ot: otVal, desc: descVal, coment: comentVal }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
@@ -996,15 +1009,28 @@ function chartWeek(universe, rows){
 }
 
 // barras horizontales: clic en barra = aislar ese valor en todo el tablero
+// n = null muestra TODOS los valores; la altura del panel se adapta a la cantidad de barras
 function chartBarH(id, map, n, color, xLabel, yLabel, dim){
-  const top = [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n);
+  const all = [...map.entries()].sort((a,b) => b[1]-a[1]);
+  const top = n ? all.slice(0, n) : all;
+
+  // el panel crece con la cantidad de barras (base 360 = panel "tall")
+  const wrap = $(id).parentElement;
+  wrap.style.height = Math.max(360, top.length * 24 + 70) + "px";
+
   draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
       datasets:[{ data: top.map(e => e[1]), backgroundColor: color, borderRadius:2 }] },
     options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
       onClick: dim ? isolateClick(dim) : undefined,
       onHover: dim ? pointerHover : undefined,
       scales:{ x:{ beginAtZero:true, grid:gridLight, title: xLabel ? axisTitle(xLabel) : undefined },
-               y:{ grid:{ display:false }, title: yLabel ? axisTitle(yLabel) : undefined } } } });
+               y:{ grid:{ display:false },
+                   ticks:{ autoSkip:false,
+                           callback: function(v){
+                             const label = this.getLabelForValue(v);
+                             return label.length > 22 ? label.slice(0, 21) + "…" : label;
+                           } },
+                   title: yLabel ? axisTitle(yLabel) : undefined } } } });
 }
 
 function chartCat(universe, rows){
@@ -1190,7 +1216,8 @@ function renderQuality(rows){
     ["Hora de cierre",  rows.filter(r => r._raw.cierre).length],
     ["Informe",         rows.filter(r => r._raw.informe).length],
     ["OT",              rows.filter(r => r._raw.ot).length],
-    ["Descripción",     rows.filter(r => r._raw.desc).length]
+    ["Descripción",     rows.filter(r => r._raw.desc).length],
+    ["Comentarios",     rows.filter(r => r._raw.coment).length]
   ];
   $("qual").innerHTML = campos.map(([n,c]) => {
     const p = Math.round(c/total*100);
@@ -1244,6 +1271,8 @@ function renderSinFecha(rows){
 
 /* =====================================================================
    7c. DETALLE DE SERVICIOS
+   Campos mostrados tal como vienen del Excel: "N/A" tal cual,
+   vacíos como celda vacía. Estado e Informe usan etiquetas de color.
    ===================================================================== */
 const DETAIL_LIMIT = 200;
 
@@ -1269,14 +1298,15 @@ function renderDetail(rows){
   const t = r => r.fecha ? r.fecha.getTime() : -Infinity;
   const shown = rows.slice().sort((a,b) => t(b) - t(a)).slice(0, DETAIL_LIMIT);
   $("detailBody").innerHTML = shown.map(r => `<tr>
-    <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : "—"}</td>
-    <td>${esc(r.cliente)}</td>
-    <td>${esc(r._raw.ot) || "—"}</td>
-    <td>${esc(r.tipo)}</td>
-    <td class="desc">${esc(r._raw.desc) || "—"}</td>
+    <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : ""}</td>
+    <td>${esc(r._raw.cliente)}</td>
+    <td>${esc(r._raw.ot)}</td>
+    <td>${esc(r._raw.tipo)}</td>
+    <td class="desc">${esc(r._raw.desc)}</td>
     <td>${estadoTag(r.estado)}</td>
     <td>${informeTag(r.informeCat)}</td>
-    <td>${esc(r.tecnico)}</td>
+    <td>${esc(r._raw.tecnico)}</td>
+    <td class="coment">${esc(r._raw.coment)}</td>
   </tr>`).join("");
   $("detailNote").textContent = rows.length > DETAIL_LIMIT
     ? `Mostrando los ${DETAIL_LIMIT} más recientes de ${rows.length.toLocaleString("es-CR")} servicios que cumplen los filtros. Refine los filtros o las series visibles para ver más.`
@@ -1323,7 +1353,7 @@ function render(){
   chartInforme(rows);
   chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente", "cliente");
   chartCat(panelRows, rows);
-  chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico", "tecnico");
+  chartBarH("cTec", countBy(rows, r => r.tecnico), null, "#3D4A52", "Servicios", "Técnico", "tecnico");
   chartBarH("cDesc", countBy(rows, r => r.desc), 12, "#6B4E7D", "Servicios", "Tipo de trabajo", "desc");
   chartBarH("cZona", countBy(rows, r => r.zona), 10, "#1F7A78", "Servicios", "Zona de gira", "zona");
   chartBarH("cDepto", countBy(rows, r => r.depto), 10, "#8A5A3B", "Servicios", "Departamento", "depto");
