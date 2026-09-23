@@ -261,8 +261,20 @@ table.detail tbody tr:hover{background:var(--paper)}
       <div class="grid">
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo.</p>
+          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. Ocultar un tipo en la leyenda lo retira de todo el tablero.</p>
           <div class="cwrap"><canvas id="cTrend"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Estado por mes</h3>
+          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <div class="cwrap"><canvas id="cEstado"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h3>Informe por mes</h3>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Ocultar una categoría en la leyenda la retira de todo el tablero.</p>
+          <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
         <section class="panel">
@@ -272,44 +284,38 @@ table.detail tbody tr:hover{background:var(--paper)}
         </section>
 
         <section class="panel">
-          <h3>Estado por mes</h3>
-          <p class="sub">Cuánto del trabajo programado queda sin completar cada mes.</p>
-          <div class="cwrap"><canvas id="cEstado"></canvas></div>
+          <h3>Entrega de informes</h3>
+          <p class="sub">Porcentaje entregado por mes sobre los servicios con el campo registrado.</p>
+          <div class="cwrap"><canvas id="cInf"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Clientes con mayor demanda</h3>
-          <p class="sub">Los 12 primeros dentro del filtro activo.</p>
+          <p class="sub">Los 12 primeros del filtro activo. Haga clic en una barra para filtrar todo el tablero con ese cliente; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cCliente"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Categoría técnica por departamento</h3>
-          <p class="sub">Dónde se concentra la especialidad y qué área la atiende. La fila "Sin categoría" agrupa filas donde el Excel no trae ese dato: cada color muestra qué departamento dejó esas filas sin categoría, no una cuarta especialidad.</p>
+          <p class="sub">Dónde se concentra la especialidad. Haga clic en una barra para filtrar todo el tablero con esa categoría; la leyenda oculta departamentos. La fila "Sin categoría" agrupa filas donde el Excel no trae el dato.</p>
           <div class="cwrap"><canvas id="cCat"></canvas></div>
         </section>
 
         <section class="panel tall">
           <h3>Carga por técnico</h3>
-          <p class="sub">Servicios asignados en el periodo filtrado.</p>
+          <p class="sub">Servicios asignados en el periodo filtrado. Haga clic en una barra para filtrar todo el tablero con ese técnico; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cTec"></canvas></div>
-        </section>
-
-        <section class="panel">
-          <h3>Entrega de informes</h3>
-          <p class="sub">Porcentaje entregado sobre los servicios que sí tienen el campo registrado.</p>
-          <div class="cwrap"><canvas id="cInf"></canvas></div>
         </section>
 
         <section class="panel third">
           <h3>Estado general</h3>
-          <p class="sub">Distribución total en el filtro activo. Clic en un segmento o en la leyenda para ocultarlo en todo el tablero.</p>
+          <p class="sub">Distribución total del filtro activo. Clic en un segmento o en la leyenda retira ese estado de todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstadoGen"></canvas></div>
         </section>
 
         <section class="panel third">
           <h3>Estado de informes</h3>
-          <p class="sub">Entregados frente a pendientes y sin registrar en el filtro activo.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Clic en un segmento o en la leyenda filtra todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfGen"></canvas></div>
         </section>
 
@@ -322,7 +328,7 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel wide">
           <h3>Detalle de servicios</h3>
-          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Las etiquetas muestran de inmediato qué está completado, pendiente o sin datos.</p>
+          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Las etiquetas muestran de inmediato qué está completado, pendiente, N/A o vacío.</p>
           <div class="table-wrap">
             <table class="detail">
               <thead>
@@ -355,8 +361,6 @@ if ('serviceWorker' in navigator) {
 <script>
 /* =====================================================================
    1. CONFIGURACIÓN DE SHAREPOINT
-   Complete estos tres valores para activar los botones de SharePoint.
-   Mientras estén vacíos, el panel funciona en modo archivo local.
    ===================================================================== */
 const CONFIG = {
   tenantId:  "c8630483-51dc-426b-9636-d04ff64930dd",
@@ -382,17 +386,40 @@ const COLS = {
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75"];
-const ESTADO_COLOR = {"Completado":"#2F6B4F","Pendiente":"#C48A16","Reprogramado":"#2B5F8C","Cancelado":"#C8102E"};
 
-let RAW = [];              // filas normalizadas
-const FILTERS = {};        // campo -> Set de valores seleccionados
+// colores fijos por categoría
+const ESTADO_COLOR = {
+  "Completado":"#2F6B4F","Pendiente":"#C48A16","Reprogramado":"#2B5F8C",
+  "Cancelado":"#C8102E","N/A":"#9AA5AD","Vacío":"#5A6B75"
+};
+const INFORME_COLOR = {
+  "Entregado":"#2F6B4F","Pendiente":"#C48A16","N/A":"#9AA5AD","Vacío":"#C8102E","Otro":"#6B7680"
+};
+
+// orden canónico de las categorías en leyendas y donas
+const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
+const INFORME_ORDER = ["Entregado","Pendiente","N/A","Vacío","Otro"];
+
+let RAW = [];
+const FILTERS = {};
 let dateFrom = null, dateTo = null;
 const charts = {};
 
 const norm = v => (v === null || v === undefined) ? "" : String(v).trim();
 const clean = v => { const s = norm(v); return (!s || s.toUpperCase() === "N/A" || s === "-") ? "" : s; };
+// igual que clean, pero PRESERVA "N/A" como categoría propia (Estado e Informe)
+const cleanNA = v => { const s = norm(v); if (!s || s === "-") return ""; if (s.toUpperCase() === "N/A") return "N/A"; return s; };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// clasifica el valor del campo Informe en las categorías del tablero
+function informeCatOf(v){
+  if (!v) return "Vacío";
+  if (/entregad/i.test(v)) return "Entregado";
+  if (/pendiente/i.test(v)) return "Pendiente";
+  if (v === "N/A") return "N/A";
+  return "Otro";
+}
 
 function setStatus(msg, kind){
   const el = $("status");
@@ -400,7 +427,6 @@ function setStatus(msg, kind){
   el.className = "status" + (kind ? " " + kind : "");
 }
 
-/* Convierte lo que venga (Date de SheetJS, serial de Excel, texto) a Date UTC */
 function toDate(v){
   if (v instanceof Date) return isNaN(v) ? null : v;
   if (typeof v === "number" && v > 20000 && v < 80000){
@@ -412,18 +438,17 @@ function toDate(v){
   if (m){
     let d = +m[1], mo = +m[2], y = +m[3];
     if (y < 100) y += 2000;
-    if (mo > 12 && d <= 12){ const t = d; d = mo; mo = t; }   // por si llega en formato m/d/aaaa
+    if (mo > 12 && d <= 12){ const t = d; d = mo; mo = t; }
     return new Date(Date.UTC(y, mo - 1, d));
   }
   const p = new Date(s);
   return isNaN(p) ? null : p;
 }
 
-/* Hora -> horas decimales */
 function toHours(v){
   if (v instanceof Date && !isNaN(v)) return v.getHours() + v.getMinutes()/60;
   if (typeof v === "number"){
-    if (v >= 0 && v < 1) return v * 24;          // fracción de día (Graph)
+    if (v >= 0 && v < 1) return v * 24;
     if (v >= 1 && v < 2) return (v - 1) * 24;
   }
   const s = clean(v);
@@ -446,8 +471,6 @@ function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3
 
 /* =====================================================================
    3. NORMALIZACIÓN DE FILAS
-   Recibe una matriz (primera fila = encabezados) y la convierte en objetos.
-   Sirve igual para SheetJS y para Microsoft Graph.
    ===================================================================== */
 function ingest(matrix, sheetName){
   if (!matrix || matrix.length < 2) return [];
@@ -471,6 +494,9 @@ function ingest(matrix, sheetName){
       if (d > 0 && d <= 16) horas = d; else horasMala = true;
     }
 
+    const estadoVal  = cleanNA(get("estado"))  || "Vacío";   // Vacío = campo sin llenar
+    const informeVal = cleanNA(get("informe"));              // "" => Vacío en informeCat
+
     const rec = {
       hoja: sheetName,
       cliente:  clean(get("cliente"))   || "Sin cliente",
@@ -478,14 +504,15 @@ function ingest(matrix, sheetName){
       categoria:clean(get("categoria")) || "Sin categoría",
       depto:    clean(get("depto"))     || "Sin departamento",
       tecnico:  clean(get("tecnico"))   || "Sin asignar",
-      estado:   clean(get("estado"))    || "Sin estado",
-      informe:  clean(get("informe")),
+      estado:   estadoVal,
+      informe:  informeVal,
+      informeCat: informeCatOf(informeVal),
       zona:     clean(get("zona"))      || "Sin gira",
       placa:    clean(get("placa")),
       ot:       clean(get("ot")),
       desc:     clean(get("desc")),
       fecha, horas, horasMala,
-      _raw: { cierre: clean(get("cierre")), informe: clean(get("informe")), ot: clean(get("ot")), desc: clean(get("desc")) }
+      _raw: { cierre: clean(get("cierre")), informe: informeVal, ot: clean(get("ot")), desc: clean(get("desc")) }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
@@ -539,7 +566,6 @@ function buildFilters(){
       ? (a,b) => String(order.get(a)).localeCompare(String(order.get(b)))
       : (a,b) => counts.get(b) - counts.get(a) || a.localeCompare(b,"es"));
 
-    // descarta selecciones que ya no existen en el nuevo conjunto
     for (const s of [...FILTERS[def.key]]) if (!counts.has(s)) FILTERS[def.key].delete(s);
 
     const g = document.createElement("div");
@@ -654,19 +680,29 @@ function topKeys(map, n){
 function sortedMonths(rows){
   return [...new Set(rows.map(r => r.mes).filter(Boolean))].sort();
 }
+function orderedList(universe, order){
+  const rest = [...universe].filter(v => !order.includes(v)).sort((a,b) => a.localeCompare(b,"es"));
+  return [...order.filter(v => universe.has(v)), ...rest];
+}
 
 /* =====================================================================
-   6a. SERIES SINCRONIZADAS ENTRE GRÁFICAS
-   Ocultar/mostrar una serie en la leyenda (tipos, estados o departamentos)
-   recalcula todas las gráficas, KPIs y contadores con solo lo visible.
+   6a. FILTRO CRUZADO DESDE LAS GRÁFICAS
+   Clic en leyendas, donas o barras oculta/aisla ese valor y recalcula
+   KPIs, todas las gráficas y la tabla de detalle.
    ===================================================================== */
-const SERIES_DIM = { tipo: "tipo", estado: "estado", depto: "depto" };
+const SERIES_DIM = {
+  tipo:"tipo", estado:"estado", depto:"depto", informe:"informeCat",
+  cliente:"cliente", tecnico:"tecnico", categoria:"categoria"
+};
 
 // dimensión -> Set de valores visibles (null = todas visibles)
-const SERIES_VIS = { tipo: null, estado: null, depto: null };
+const SERIES_VIS = { tipo:null, estado:null, depto:null, informe:null, cliente:null, tecnico:null, categoria:null };
 
 // valores presentes con el filtro actual del panel (lo llena render())
-let UNIVERSE = { tipo: new Set(), estado: new Set(), depto: new Set() };
+let UNIVERSE = {
+  tipo:new Set(), estado:new Set(), depto:new Set(), informe:new Set(),
+  cliente:new Set(), tecnico:new Set(), categoria:new Set()
+};
 
 function applySeriesFilters(rows){
   for (const dim of Object.keys(SERIES_VIS)){
@@ -679,6 +715,7 @@ function applySeriesFilters(rows){
 
 function toggleSeries(dim, value){
   const all = UNIVERSE[dim];
+  if (!all) return;
   let vis = SERIES_VIS[dim];
   if (!vis){
     vis = new Set(all);
@@ -688,7 +725,6 @@ function toggleSeries(dim, value){
   } else {
     vis.add(value);
   }
-  // si no queda nada oculto (o se ocultaron todas), vuelve a "todas visibles"
   SERIES_VIS[dim] = (!all.size || vis.size === 0 || vis.size === all.size) ? null : vis;
   render();
 }
@@ -697,8 +733,7 @@ function seriesLegendClick(dim){
   return (e, item) => toggleSeries(dim, item.text);
 }
 
-// la serie "Total" de la tendencia solo se oculta en su gráfica: no es un
-// tipo real, así que no filtra al resto del tablero
+// la serie "Total" de la tendencia solo se oculta en su gráfica
 function totalLegendClick(e, item, legend){
   const chart = legend.chart;
   if (chart.isDatasetVisible(item.datasetIndex)) chart.hide(item.datasetIndex);
@@ -706,10 +741,15 @@ function totalLegendClick(e, item, legend){
   chart.update();
 }
 
+// cursor de "manita" sobre elementos clicables
+function pointerHover(e, els){
+  if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
+}
+
 // "2025-W23" -> "9 jun – 15 jun" (lunes a domingo de esa semana ISO)
 function weekRangeLabel(key, withYear){
   const [y, w] = key.split("-W").map(Number);
-  const jan4 = new Date(Date.UTC(y, 0, 4));   // el 4 de enero siempre cae en la semana ISO 1
+  const jan4 = new Date(Date.UTC(y, 0, 4));
   const dow = jan4.getUTCDay() || 7;
   const monday = new Date(jan4);
   monday.setUTCDate(jan4.getUTCDate() - dow + 1 + (w - 1) * 7);
@@ -720,10 +760,14 @@ function weekRangeLabel(key, withYear){
   return fmt(monday) + " – " + fmt(sunday);
 }
 
- $("btnSeriesReset").addEventListener("click", () => {
-  SERIES_VIS.tipo = SERIES_VIS.estado = SERIES_VIS.depto = null;
-  render();
-});
+// protección: no rompe el script si el botón no existe en el HTML
+const resetBtnEl = $("btnSeriesReset");
+if (resetBtnEl){
+  resetBtnEl.addEventListener("click", () => {
+    for (const d of Object.keys(SERIES_VIS)) SERIES_VIS[d] = null;
+    render();
+  });
+}
 
 /* =====================================================================
    6. GRÁFICAS
@@ -784,6 +828,34 @@ function chartTrend(universe, rows){
       scales: baseScales(true, false, "Mes", "Servicios") } });
 }
 
+function chartEstado(universe, rows){
+  const months = sortedMonths(universe);
+  const estados = orderedList(UNIVERSE.estado, ESTADO_ORDER);
+  const vis = SERIES_VIS.estado;
+  draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
+      datasets: estados.map(e => ({ label:e,
+        data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
+        backgroundColor: ESTADO_COLOR[e] || "#6B7680",
+        hidden: vis ? !vis.has(e) : false })) },
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{ onClick: seriesLegendClick("estado"), labels:{ boxWidth:12, boxHeight:12 } } },
+      scales: baseScales(false, true, "Mes", "Servicios") } });
+}
+
+function chartInformeMes(universe, rows){
+  const months = sortedMonths(universe);
+  const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
+  const vis = SERIES_VIS.informe;
+  draw("cInfMes", { type:"bar", data:{ labels:months.map(monthLabel),
+      datasets: cats.map((c,i) => ({ label:c,
+        data: months.map(m => rows.filter(r => r.mes === m && r.informeCat === c).length),
+        backgroundColor: INFORME_COLOR[c] || PALETTE[i % PALETTE.length],
+        hidden: vis ? !vis.has(c) : false })) },
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{ onClick: seriesLegendClick("informe"), labels:{ boxWidth:12, boxHeight:12 } } },
+      scales: baseScales(false, true, "Mes", "Servicios") } });
+}
+
 function chartWeek(universe, rows){
   const weeks = [...new Set(universe.map(r => r.sem).filter(Boolean))].sort();
   const multiYear = new Set(weeks.map(w => w.split("-W")[0])).size > 1;
@@ -798,31 +870,20 @@ function chartWeek(universe, rows){
         y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados") } } } });
 }
 
-function chartEstado(universe, rows){
-  const months = sortedMonths(universe);
-  const estados = [...UNIVERSE.estado].sort((a,b) => a.localeCompare(b,"es"));
-  const vis = SERIES_VIS.estado;
-  draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
-      datasets: estados.map((e,i) => ({ label:e,
-        data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
-        backgroundColor: ESTADO_COLOR[e] || PALETTE[i % PALETTE.length],
-        hidden: vis ? !vis.has(e) : false })) },
-    options:{ maintainAspectRatio:false,
-      plugins:{ legend:{ onClick: seriesLegendClick("estado"), labels:{ boxWidth:12, boxHeight:12 } } },
-      scales: baseScales(false, true, "Mes", "Servicios") } });
-}
-
-function chartBarH(id, map, n, color, xLabel, yLabel){
+// barras horizontales con clic para filtrar (dim = dimensión a filtrar)
+function chartBarH(id, map, n, color, xLabel, yLabel, dim){
   const top = [...map.entries()].sort((a,b) => b[1]-a[1]).slice(0,n);
   draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
       datasets:[{ data: top.map(e => e[1]), backgroundColor: color, borderRadius:2 }] },
     options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      onClick: dim ? (e, els, chart) => { if (els.length) toggleSeries(dim, chart.data.labels[els[0].index]); } : undefined,
+      onHover: dim ? pointerHover : undefined,
       scales:{ x:{ beginAtZero:true, grid:gridLight, title: xLabel ? axisTitle(xLabel) : undefined },
                y:{ grid:{ display:false }, title: yLabel ? axisTitle(yLabel) : undefined } } } });
 }
 
 function chartCat(universe, rows){
-  const cats = topKeys(countBy(universe, r => r.categoria), 10);
+  const cats = topKeys(countBy(rows, r => r.categoria), 10);
   const deptos = [...UNIVERSE.depto].sort((a,b) => a.localeCompare(b,"es"));
   const vis = SERIES_VIS.depto;
   draw("cCat", { type:"bar", data:{ labels:cats,
@@ -831,6 +892,8 @@ function chartCat(universe, rows){
         backgroundColor: PALETTE[i % PALETTE.length],
         hidden: vis ? !vis.has(d) : false })) },
     options:{ indexAxis:"y", maintainAspectRatio:false,
+      onClick: (e, els, chart) => { if (els.length) toggleSeries("categoria", chart.data.labels[els[0].index]); },
+      onHover: pointerHover,
       plugins:{ legend:{ onClick: seriesLegendClick("depto"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales:{ x:{ stacked:true, beginAtZero:true, grid:gridLight, title: axisTitle("Servicios") },
                y:{ stacked:true, grid:{ display:false }, title: axisTitle("Categoría técnica") } } } });
@@ -853,42 +916,33 @@ function chartInforme(rows){
                    ticks:{ callback:v => v + "%" } } } } });
 }
 
-/* ---- donas resumen: estado e informes ---- */
+/* ---- donas resumen con filtro cruzado ---- */
 function chartEstadoGen(rows){
-  const estados = [...UNIVERSE.estado].sort((a,b) => a.localeCompare(b,"es"));
+  const estados = orderedList(UNIVERSE.estado, ESTADO_ORDER);
   draw("cEstadoGen", { type:"doughnut",
     data:{ labels: estados,
       datasets:[{ data: estados.map(e => rows.filter(r => r.estado === e).length),
         backgroundColor: estados.map(e => ESTADO_COLOR[e] || "#6B7680"),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
-      onClick: (e, els, chart) => {
-        if (els.length) toggleSeries("estado", chart.data.labels[els[0].index]);
-      },
-      onHover: (e, els) => {
-        if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
-      },
+      onClick: (e, els, chart) => { if (els.length) toggleSeries("estado", chart.data.labels[els[0].index]); },
+      onHover: pointerHover,
       plugins:{ legend:{ position:"right", onClick: seriesLegendClick("estado"),
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
 }
 
 function chartInformeGen(rows){
-  let ent = 0, pend = 0, sin = 0, otro = 0;
-  for (const r of rows){
-    if (!r.informe) sin++;
-    else if (/entregad/i.test(r.informe)) ent++;
-    else if (/pendiente/i.test(r.informe)) pend++;
-    else otro++;
-  }
-  const labels = [], data = [], colors = [];
-  if (ent)  { labels.push("Entregado");     data.push(ent);  colors.push("#2F6B4F"); }
-  if (pend) { labels.push("Pendiente");     data.push(pend); colors.push("#C48A16"); }
-  if (sin)  { labels.push("Sin registrar"); data.push(sin);  colors.push("#C8102E"); }
-  if (otro) { labels.push("Otro valor");    data.push(otro); colors.push("#6B7680"); }
+  const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
   draw("cInfGen", { type:"doughnut",
-    data:{ labels, datasets:[{ data, backgroundColor: colors, borderColor:"#FFFFFF", borderWidth:2 }] },
+    data:{ labels: cats,
+      datasets:[{ data: cats.map(c => rows.filter(r => r.informeCat === c).length),
+        backgroundColor: cats.map(c => INFORME_COLOR[c] || "#6B7680"),
+        borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
-      plugins:{ legend:{ position:"right", labels:{ boxWidth:12, boxHeight:12 } } } } });
+      onClick: (e, els, chart) => { if (els.length) toggleSeries("informe", chart.data.labels[els[0].index]); },
+      onHover: pointerHover,
+      plugins:{ legend:{ position:"right", onClick: seriesLegendClick("informe"),
+                 labels:{ boxWidth:12, boxHeight:12 } } } } });
 }
 
 /* =====================================================================
@@ -900,7 +954,7 @@ function renderKpis(rows){
   const pend  = rows.filter(r => /pendiente/i.test(r.estado)).length;
   const prev  = rows.filter(r => /preventiv/i.test(r.tipo)).length;
   const corr  = rows.filter(r => /correctiv/i.test(r.tipo)).length;
-  const sinInf= rows.filter(r => !r.informe || /pendiente/i.test(r.informe)).length;
+  const sinInf= rows.filter(r => r.informeCat !== "Entregado").length;
   const pc = (a,b) => b ? Math.round(a/b*100) + "%" : "—";
 
   const meses = countBy(rows, r => r.mes);
@@ -925,12 +979,10 @@ function renderKpis(rows){
   ];
 
   const cardsHtml = items.map(([v,l]) => `<div class="kpi"><b>${v}</b><small>${l}</small></div>`).join("");
-  // se duplica el set para que el desplazamiento automático cierre el ciclo sin salto visible
   $("kpis").innerHTML = cardsHtml + cardsHtml;
   initKpiMarquee();
 }
 
-/* ---- franja de KPIs: auto-desplazamiento con arrastre, rueda y botones ---- */
 let kpiPaused = false, kpiResumeTimer = null, kpiHalfWidth = 0;
 
 function kpiPauseFor(ms){
@@ -1018,24 +1070,26 @@ function renderQuality(rows){
 }
 
 /* =====================================================================
-   7b. DETALLE DE SERVICIOS (tabla con descripción, estado e informe)
-   Se actualiza con los filtros del panel y las series visibles.
+   7b. DETALLE DE SERVICIOS
    ===================================================================== */
 const DETAIL_LIMIT = 200;
 
 function estadoTag(estado){
+  if (estado === "Vacío") return '<span class="tag bad">Vacío</span>';
+  if (estado === "N/A")   return '<span class="tag muted">N/A</span>';
   if (/completad/i.test(estado))   return '<span class="tag ok">Completado</span>';
   if (/pendiente/i.test(estado))   return '<span class="tag warn">Pendiente</span>';
   if (/reprogramad/i.test(estado)) return '<span class="tag info">Reprogramado</span>';
   if (/cancelad/i.test(estado))    return '<span class="tag bad">Cancelado</span>';
-  return '<span class="tag muted">Sin estado</span>';
+  return '<span class="tag muted">' + esc(estado) + '</span>';
 }
 
-function informeTag(informe){
-  if (/entregad/i.test(informe)) return '<span class="tag ok">Entregado</span>';
-  if (/pendiente/i.test(informe)) return '<span class="tag warn">Pendiente</span>';
-  if (!informe) return '<span class="tag bad">Sin registrar</span>';
-  return '<span class="tag muted">' + esc(informe) + '</span>';
+function informeTag(cat){
+  if (cat === "Entregado") return '<span class="tag ok">Entregado</span>';
+  if (cat === "Pendiente") return '<span class="tag warn">Pendiente</span>';
+  if (cat === "N/A")       return '<span class="tag muted">N/A</span>';
+  if (cat === "Vacío")     return '<span class="tag bad">Vacío</span>';
+  return '<span class="tag muted">' + esc(cat) + '</span>';
 }
 
 function renderDetail(rows){
@@ -1048,7 +1102,7 @@ function renderDetail(rows){
     <td>${esc(r.tipo)}</td>
     <td class="desc">${esc(r.desc) || "—"}</td>
     <td>${estadoTag(r.estado)}</td>
-    <td>${informeTag(r.informe)}</td>
+    <td>${informeTag(r.informeCat)}</td>
     <td>${esc(r.tecnico)}</td>
   </tr>`).join("");
   $("detailNote").textContent = rows.length > DETAIL_LIMIT
@@ -1062,11 +1116,15 @@ function renderDetail(rows){
 function render(){
   const panelRows = filtered();        // filtros del panel lateral
   UNIVERSE = {
-    tipo:   new Set(panelRows.map(r => r.tipo)),
-    estado: new Set(panelRows.map(r => r.estado)),
-    depto:  new Set(panelRows.map(r => r.depto))
+    tipo:     new Set(panelRows.map(r => r.tipo)),
+    estado:   new Set(panelRows.map(r => r.estado)),
+    depto:    new Set(panelRows.map(r => r.depto)),
+    informe:  new Set(panelRows.map(r => r.informeCat)),
+    cliente:  new Set(panelRows.map(r => r.cliente)),
+    tecnico:  new Set(panelRows.map(r => r.tecnico)),
+    categoria:new Set(panelRows.map(r => r.categoria))
   };
-  const rows = applySeriesFilters(panelRows);   // + series ocultas en leyendas
+  const rows = applySeriesFilters(panelRows);   // + clics en las gráficas
 
   $("title").textContent = rows.length
     ? rows.length.toLocaleString("es-CR") + " servicios en el filtro actual"
@@ -1083,12 +1141,13 @@ function render(){
   renderKpis(rows);
   renderQuality(rows);
   chartTrend(panelRows, rows);
-  chartWeek(panelRows, rows);
   chartEstado(panelRows, rows);
-  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente");
-  chartCat(panelRows, rows);
-  chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico");
+  chartInformeMes(panelRows, rows);
+  chartWeek(panelRows, rows);
   chartInforme(rows);
+  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente", "cliente");
+  chartCat(panelRows, rows);
+  chartBarH("cTec", countBy(rows, r => r.tecnico), 15, "#3D4A52", "Servicios", "Técnico", "tecnico");
   chartEstadoGen(rows);
   chartInformeGen(rows);
   renderDetail(rows);
@@ -1133,7 +1192,7 @@ function readFile(file){
    ===================================================================== */
 const GRAPH = "https://graph.microsoft.com/v1.0";
 let msalApp = null;
-let isLoadingSp = false;      // evita que se encimen actualizaciones si una todavía está en curso
+let isLoadingSp = false;
 let lastLoadTime = null;
 
 function loadScript(src){
@@ -1144,9 +1203,6 @@ function loadScript(src){
   });
 }
 
-// interactive=true permite abrir la ventana de login si hace falta (uso: clic del usuario).
-// interactive=false solo intenta con la sesión que el navegador ya tenga guardada, sin
-// mostrar ninguna ventana emergente — así el refresco automático no interrumpe a nadie.
 async function getToken(interactive){
   if (!msalApp){
     await loadScript("https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js");
@@ -1176,9 +1232,6 @@ async function getToken(interactive){
   return (await msalApp.acquireTokenPopup({ scopes, account })).accessToken;
 }
 
-// Convierte un link normal de "Copiar vínculo" al formato que Microsoft Graph
-// necesita para resolverlo directo a un archivo, sin conocer su ruta de carpetas.
-// Referencia: https://learn.microsoft.com/graph/api/shares-get
 function encodeShareUrl(url){
   const b64 = btoa(unescape(encodeURIComponent(url)))
     .replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
@@ -1186,8 +1239,6 @@ function encodeShareUrl(url){
 }
 
 async function gget(url, token, extraHeaders){
-  // cache:"no-store" evita que el navegador reutilice una respuesta anterior en
-  // vez de pedirle a Microsoft Graph el estado más reciente del archivo.
   const res = await fetch(url, {
     cache: "no-store",
     headers: Object.assign({ Authorization: "Bearer " + token }, extraHeaders || {})
@@ -1205,14 +1256,12 @@ function setSpButtonsDisabled(disabled){
   $("btnRefresh").disabled = disabled;
 }
 
-// interactive=true: uso desde un clic (permite ventana de login si hace falta).
-// interactive=false: uso desde el refresco automático (silencioso, nunca interrumpe).
 async function connectSharePoint(interactive){
   if (!CONFIG.tenantId || !CONFIG.clientId || !CONFIG.shareUrl){
     if (interactive) setStatus("Falta completar tenantId, clientId o shareUrl en el bloque CONFIG del archivo.", "err");
     return false;
   }
-  if (isLoadingSp) return false;   // ya hay una actualización en curso, no se encima otra
+  if (isLoadingSp) return false;
   isLoadingSp = true;
   if (interactive) setSpButtonsDisabled(true);
 
@@ -1226,7 +1275,6 @@ async function connectSharePoint(interactive){
     const driveId = item.parentReference.driveId;
     const base = `${GRAPH}/drives/${driveId}/items/${item.id}/workbook`;
 
-    // sesión no persistente: acelera lecturas múltiples sobre el mismo libro
     let sessionHeaders = {};
     try{
       const sres = await fetch(base + "/createSession", {
@@ -1257,8 +1305,6 @@ async function connectSharePoint(interactive){
     loadRows(rows);
     return true;
   } catch(err){
-    // en el intento silencioso (auto-refresco o carga inicial) un fallo es normal si aún no hay
-    // sesión — no se muestra como error para no confundir a alguien que todavía no ha conectado.
     if (interactive) setStatus("SharePoint: " + err.message, "err");
     return false;
   } finally {
@@ -1279,7 +1325,6 @@ setInterval(() => {
 }, AUTO_REFRESH_SECONDS * 1000);
 
 // si la pestaña estuvo en segundo plano, al volver a ella se refresca de inmediato
-// (en vez de esperar hasta el siguiente tic del ciclo automático, que pudo haber quedado a mitad)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") connectSharePoint(false);
 });
