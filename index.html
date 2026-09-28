@@ -221,7 +221,7 @@ table.detail tbody tr:hover{background:var(--paper)}
       <button class="btn ghost" id="btnLocal">Abrir archivo local</button>
       <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hidden">
       <p class="status" id="status">Sin datos cargados. También puede arrastrar el archivo a esta ventana.</p>
-      <p class="note" id="autoNote" style="margin-top:8px">Actualización automática cada 15 min mientras esta pestaña esté abierta.</p>
+      <p class="note" id="autoNote" style="margin-top:8px">Actualización automática cada 15 min mientras esta pestaña esté abierta. Los servicios se cuentan por "ID servicio": filas con el mismo ID son un solo trabajo.</p>
     </div>
 
     <div id="filters"></div>
@@ -263,25 +263,25 @@ table.detail tbody tr:hover{background:var(--paper)}
       <div class="grid">
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga y qué proporción es trabajo planificado frente a correctivo. La leyenda oculta o muestra cada tipo en todo el tablero.</p>
+          <p class="sub">Cómo evoluciona la carga por tipo — incluye Preventivo, Correctivo, Instalación y Vacaciones, entre otros. La leyenda oculta o muestra cada tipo en todo el tablero. Conteo por ID de servicio.</p>
           <div class="cwrap"><canvas id="cTrend"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado de trabajos por mes</h3>
-          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar). La leyenda oculta o muestra cada categoría en todo el tablero.</p>
+          <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar), contados por ID de servicio. La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Estado de informes por mes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). La leyenda oculta o muestra cada categoría en todo el tablero.</p>
+          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar), contados por ID de servicio. La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
         <section class="panel">
           <h3>Ritmo semanal</h3>
-          <p class="sub">Servicios cerrados por semana (lunes a domingo), para ver picos y valles dentro del mes.</p>
+          <p class="sub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
@@ -289,6 +289,12 @@ table.detail tbody tr:hover{background:var(--paper)}
           <h3>Entrega de informes</h3>
           <p class="sub">Porcentaje entregado por mes sobre los servicios con el campo registrado.</p>
           <div class="cwrap"><canvas id="cInf"></canvas></div>
+        </section>
+
+        <section class="panel tall">
+          <h3>Servicios por tipo</h3>
+          <p class="sub">Distribución total por tipo de servicio, contada por ID. Haga clic en una barra para ver únicamente ese tipo en todo el tablero; clic de nuevo lo libera.</p>
+          <div class="cwrap"><canvas id="cTipo"></canvas></div>
         </section>
 
         <section class="panel tall">
@@ -305,7 +311,7 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel tall">
           <h3>Carga por técnico</h3>
-          <p class="sub">Todos los técnicos y colaboradores con servicios en el periodo filtrado, del que más tiene al que menos. Haga clic en una barra para ver únicamente esa persona en todo el tablero; clic de nuevo la libera.</p>
+          <p class="sub">Servicios (por ID) con cada técnico asignado, del que más tiene al que menos. Haga clic en una barra para ver únicamente esa persona en todo el tablero; clic de nuevo la libera.</p>
           <div class="cwrap"><canvas id="cTec"></canvas></div>
         </section>
 
@@ -368,12 +374,12 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel wide">
           <h3>Detalle de servicios</h3>
-          <p class="sub">Registros que cumplen los filtros del panel y las series visibles en las gráficas — del más reciente al más antiguo. Los campos se muestran tal como vienen del Excel: "N/A" se muestra tal cual y los campos vacíos quedan en blanco. Las etiquetas de Estado e Informe muestran de inmediato qué está completado, pendiente, N/A o vacío.</p>
+          <p class="sub">Una fila por servicio: las filas del Excel que comparten el mismo "ID servicio" se unifican en una sola. Los campos se muestran tal como vienen del Excel: "N/A" se muestra tal cual y los campos vacíos quedan en blanco. Las etiquetas de Estado e Informe muestran de inmediato qué está completado, pendiente, N/A o vacío.</p>
           <div class="table-wrap">
             <table class="detail">
               <thead>
                 <tr>
-                  <th>Fecha</th><th>Cliente</th><th>OT</th><th>Tipo</th>
+                  <th>Fecha</th><th>Cliente</th><th>Dirección</th><th>OT</th><th>Tipo</th>
                   <th>Descripción</th><th>Estado</th><th>Informe</th><th>Técnico</th><th>Comentarios</th>
                 </tr>
               </thead>
@@ -420,7 +426,7 @@ const COLS = {
   depto:"Departamento", tecnico:"Nombre de los técnicos", entrada:"Hora entrada",
   inicio:"Hora inicio", cierre:"Hora cierre", placa:"Placa Vehículo",
   zona:"Zona de Gira", estado:"Estado", informe:"Informe",
-  desc:"Descripción", coment:"Comentarios"
+  desc:"Descripción", coment:"Comentarios", idserv:"ID servicio"
 };
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -557,6 +563,7 @@ function ingest(matrix, sheetName){
 
     // valores crudos: "N/A" se preserva; vacío queda vacío
     const clienteVal = cleanNA(get("cliente"));
+    const dirVal     = cleanNA(get("dir"));
     const tipoVal    = cleanNA(get("tipo"));
     const catVal     = cleanNA(get("categoria"));
     const deptoVal   = cleanNA(get("depto"));
@@ -567,6 +574,7 @@ function ingest(matrix, sheetName){
     const otVal      = cleanNA(get("ot"));
     const descVal    = cleanNA(get("desc"));
     const comentVal  = cleanNA(get("coment"));
+    const idVal      = cleanNA(get("idserv"));
 
     const rec = {
       hoja: sheetName,
@@ -584,11 +592,12 @@ function ingest(matrix, sheetName){
       ot:       otVal,
       otCat:    (otVal && otVal !== "N/A") ? "Con OT" : "Sin OT",
       desc:     descVal    || "Vacío",
+      idServ:   idVal,                    // clave para unificar servicios repetidos
       fecha, horas, horasMala,
       sinFechaMes: false,
       // valores crudos para las tablas (vacío = celda vacía, N/A = "N/A")
-      _raw: { cliente: clienteVal, tipo: tipoVal, categoria: catVal, depto: deptoVal,
-              tecnico: tecnicoVal, zona: zonaVal, cierre: clean(get("cierre")),
+      _raw: { cliente: clienteVal, dir: dirVal, tipo: tipoVal, categoria: catVal,
+              depto: deptoVal, tecnico: tecnicoVal, zona: zonaVal, cierre: clean(get("cierre")),
               informe: informeVal, ot: otVal, desc: descVal, coment: comentVal }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
@@ -623,8 +632,36 @@ function ingest(matrix, sheetName){
   return out;
 }
 
+/* =====================================================================
+   3b. UNIFICACIÓN POR "ID SERVICIO"
+   Varias filas con el mismo ID representan un mismo trabajo (p. ej., el
+   mismo sitio registrado más de una vez), así que se conserva una sola:
+   la más completa. Las filas sin ID cuentan individualmente.
+   ===================================================================== */
+function rowCompleteness(r){
+  let s = 0;
+  if (r.fecha) s += 4;
+  if (r.estado && r.estado !== "Vacío") s += 2;
+  if (r._raw.informe) s++;
+  if (r._raw.tecnico) s++;
+  if (r._raw.ot) s++;
+  if (r._raw.desc) s++;
+  return s;
+}
+
+function dedupeById(rows){
+  const byId = new Map();
+  const sinId = [];
+  for (const r of rows){
+    if (!r.idServ){ sinId.push(r); continue; }
+    const prev = byId.get(r.idServ);
+    if (!prev || rowCompleteness(r) > rowCompleteness(prev)) byId.set(r.idServ, r);
+  }
+  return [...byId.values()].concat(sinId);
+}
+
 function loadRows(rows){
-  RAW = rows;
+  RAW = dedupeById(rows);
   buildFilters();
   const fechas = RAW.map(r => r.fecha).filter(Boolean).sort((a,b) => a - b);
   if (fechas.length){
@@ -939,7 +976,11 @@ function baseScales(dark, stacked, xLabel, yLabel){
 
 function chartTrend(universe, rows){
   const months = sortedMonths(universe);
-  const tipos = topKeys(countBy(universe, r => r.tipo), 5);
+  const tipos = topKeys(countBy(universe, r => r.tipo), 8);
+  // las categorías solicitadas siempre aparecen, aunque no estén en el top 8
+  for (const must of ["Instalación","Vacaciones"]){
+    if (UNIVERSE.tipo.has(must) && !tipos.includes(must)) tipos.push(must);
+  }
   const vis = SERIES_VIS.tipo;
   const datasets = tipos.map((t,i) => ({
     label:t,
@@ -1300,6 +1341,7 @@ function renderDetail(rows){
   $("detailBody").innerHTML = shown.map(r => `<tr>
     <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : ""}</td>
     <td>${esc(r._raw.cliente)}</td>
+    <td>${esc(r._raw.dir)}</td>
     <td>${esc(r._raw.ot)}</td>
     <td>${esc(r._raw.tipo)}</td>
     <td class="desc">${esc(r._raw.desc)}</td>
@@ -1351,6 +1393,7 @@ function render(){
   chartInformeMes(panelRows, rows);
   chartWeek(panelRows, rows);
   chartInforme(rows);
+  chartBarH("cTipo", countBy(rows, r => r.tipo), null, "#2B5F8C", "Servicios", "Tipo de servicio", "tipo");
   chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente", "cliente");
   chartCat(panelRows, rows);
   chartBarH("cTec", countBy(rows, r => r.tecnico), null, "#3D4A52", "Servicios", "Técnico", "tecnico");
@@ -1388,8 +1431,10 @@ function readFile(file){
         rows = rows.concat(ingest(matrix, name.trim()));
       }
       if (!rows.length){ setStatus("El archivo no contiene filas reconocibles.", "err"); return; }
-      setStatus(rows.length.toLocaleString("es-CR") + " servicios cargados desde archivo local.", "ok");
       loadRows(rows);
+      const unif = rows.length - RAW.length;
+      const extra = unif > 0 ? ` · ${unif.toLocaleString("es-CR")} filas unificadas por ID` : "";
+      setStatus(RAW.length.toLocaleString("es-CR") + " servicios cargados desde archivo local" + extra + ".", "ok");
     } catch(err){
       setStatus("No se pudo leer el archivo: " + err.message, "err");
     }
@@ -1512,8 +1557,11 @@ async function connectSharePoint(interactive){
     }
 
     lastLoadTime = new Date();
-    setStatus(rows.length.toLocaleString("es-CR") + " servicios · actualizado " + lastLoadTime.toLocaleTimeString("es-CR"), "ok");
     loadRows(rows);
+    const unif = rows.length - RAW.length;
+    const extra = unif > 0 ? ` · ${unif.toLocaleString("es-CR")} filas unificadas por ID` : "";
+    setStatus(RAW.length.toLocaleString("es-CR") + " servicios · actualizado " +
+              lastLoadTime.toLocaleTimeString("es-CR") + extra, "ok");
     return true;
   } catch(err){
     if (interactive) setStatus("SharePoint: " + err.message, "err");
