@@ -281,7 +281,7 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel">
           <h3>Ritmo semanal</h3>
-          <p class="sub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para enfocar todo el tablero en esa semana; clic de nuevo lo libera.</p>
+          <p class="sub" id="weekSub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para ver esa semana por días y enfocar todo el tablero en ella.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
@@ -951,26 +951,26 @@ function pointerHover(e, els){
   if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
 }
 
-// "2026-W23" -> "8 jun – 14 jun" (lunes a domingo de esa semana ISO)
-function weekRangeLabel(key, withYear){
+const DIAS_SEM = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+// "2026-W28" -> Date UTC del lunes de esa semana ISO
+function mondayOfWeek(key){
   const [y, w] = key.split("-W").map(Number);
   const jan4 = new Date(Date.UTC(y, 0, 4));
   const dow = jan4.getUTCDay() || 7;
   const monday = new Date(jan4);
   monday.setUTCDate(jan4.getUTCDate() - dow + 1 + (w - 1) * 7);
+  return monday;
+}
+
+// "2026-W28" -> "6 jul – 12 jul" (lunes a domingo de esa semana ISO)
+function weekRangeLabel(key, withYear){
+  const monday = mondayOfWeek(key);
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
   const fmt = d => d.getUTCDate() + " " + MESES[d.getUTCMonth()].slice(0,3).toLowerCase()
                  + (withYear ? " " + String(d.getUTCFullYear()).slice(2) : "");
   return fmt(monday) + " – " + fmt(sunday);
-}
-
-const resetBtnEl = $("btnSeriesReset");
-if (resetBtnEl){
-  resetBtnEl.addEventListener("click", () => {
-    for (const d of Object.keys(SERIES_VIS)) SERIES_VIS[d] = null;
-    render();
-  });
 }
 
 /* =====================================================================
@@ -1064,8 +1064,48 @@ function chartInformeMes(universe, rows){
       scales: baseScales(false, true, "Mes", "Servicios") } });
 }
 
-// clic en un punto = aislar esa semana en todo el tablero (clic de nuevo libera)
+// Sin semana aislada: línea por semanas.
+// Con una semana aislada (clic en un punto): la gráfica se convierte a barras
+// por día (lunes a domingo) mostrando cómo se distribuyó esa semana, mientras
+// el resto del tablero queda enfocado en ella.
 function chartWeek(universe, rows){
+  const sub = $("weekSub");
+  const vis = SERIES_VIS.sem;
+
+  // ---------- modo día: hay una semana aislada ----------
+  if (vis && vis.size === 1){
+    const key = [...vis][0];
+    const monday = mondayOfWeek(key);
+    const days = [];
+    for (let i = 0; i < 7; i++){
+      const d = new Date(monday);
+      d.setUTCDate(monday.getUTCDate() + i);
+      days.push(d);
+    }
+    const labels = days.map((d,i) =>
+      DIAS_SEM[i] + " " + d.getUTCDate() + " " + MESES[d.getUTCMonth()].slice(0,3).toLowerCase());
+    const data = days.map(d => {
+      const t = d.getTime();
+      return rows.filter(r => r.fecha && r.fecha.getTime() === t).length;
+    });
+    draw("cWeek", { type:"bar",
+        data:{ labels,
+          datasets:[{ label:"Servicios", data,
+            backgroundColor:C_AZUL, borderRadius:2 }] },
+      options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+        scales:{
+          x:{ grid:{ display:false },
+              title: axisTitle("Días de la semana " + weekRangeLabel(key, false) +
+                " — los registros sin fecha no se ubican en un día") },
+          y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados"),
+              ticks:{ precision:0 } } } } });
+    if (sub) sub.innerHTML =
+      'Vista por días de la semana <strong>' + esc(weekRangeLabel(key, false)) +
+      '</strong>. El resto del tablero está enfocado en esa semana. Use "Restablecer series ocultas" o "Limpiar filtros" para volver a la vista semanal.';
+    return;
+  }
+
+  // ---------- modo semanas (normal) ----------
   const weeks = [...new Set(universe.map(r => r.sem).filter(Boolean))].sort();
   const multiYear = new Set(weeks.map(w => w.split("-W")[0])).size > 1;
   const labels = weeks.map(w => weekRangeLabel(w, multiYear));
@@ -1083,9 +1123,11 @@ function chartWeek(universe, rows){
       },
       onHover: pointerHover,
       scales:{
-        x:{ grid:{ display:false }, title: axisTitle("Semana (lunes a domingo) — haga clic en un punto para enfocar el tablero en esa semana"),
+        x:{ grid:{ display:false }, title: axisTitle("Semana (lunes a domingo) — haga clic en un punto para ver esa semana por días y enfocar el tablero en ella"),
             ticks:{ autoSkip:true, maxRotation:60, maxTicksLimit:18 } },
         y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados") } } } });
+  if (sub) sub.textContent =
+    "Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para ver esa semana por días y enfocar todo el tablero en ella.";
 }
 
 // barras horizontales: clic en barra = aislar ese valor en todo el tablero
