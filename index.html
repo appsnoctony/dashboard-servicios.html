@@ -1459,6 +1459,13 @@ function loadScript(src){
   });
 }
 
+// true si la app corre como PWA instalada (modo standalone): ahí los
+// popups suelen estar bloqueados y el login debe ser por redirect.
+function isStandalone(){
+  return window.matchMedia("(display-mode: standalone)").matches
+      || window.navigator.standalone === true;
+}
+
 async function getToken(interactive){
   if (!msalApp){
     await loadScript("https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js");
@@ -1468,6 +1475,8 @@ async function getToken(interactive){
       cache:{ cacheLocation:"localStorage" }
     });
     await msalApp.initialize();
+    // procesa el regreso de un login por redirect (no hace nada si no hay uno pendiente)
+    await msalApp.handleRedirectPromise();
   }
   const scopes = ["Files.Read.All","Sites.Read.All"];
   let account = msalApp.getAllAccounts()[0];
@@ -1480,6 +1489,15 @@ async function getToken(interactive){
     }
   }
   if (!interactive) throw new Error("Sin sesión activa");
+
+  // En PWA instalada: login por redirect. La página se recarga tras el login
+  // y el auto-conector silencioso retoma la carga de datos sin tocar nada más.
+  // En navegador normal: se mantiene el popup de siempre.
+  if (isStandalone()){
+    if (!account) await msalApp.loginRedirect({ scopes });
+    else await msalApp.acquireTokenRedirect({ scopes, account });
+    throw new Error("REDIRECT_INICIADO");   // no es un error real: la página se recargará
+  }
 
   if (!account){
     const r = await msalApp.loginPopup({ scopes });
@@ -1564,7 +1582,9 @@ async function connectSharePoint(interactive){
               lastLoadTime.toLocaleTimeString("es-CR") + extra, "ok");
     return true;
   } catch(err){
-    if (interactive) setStatus("SharePoint: " + err.message, "err");
+    // "REDIRECT_INICIADO" no es un error: el login por redirect está en curso
+    // y la página se recargará sola para retomar la carga de datos.
+    if (interactive && err.message !== "REDIRECT_INICIADO") setStatus("SharePoint: " + err.message, "err");
     return false;
   } finally {
     isLoadingSp = false;
