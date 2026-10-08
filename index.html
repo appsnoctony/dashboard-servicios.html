@@ -281,7 +281,7 @@ table.detail tbody tr:hover{background:var(--paper)}
 
         <section class="panel">
           <h3>Ritmo semanal</h3>
-          <p class="sub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio.</p>
+          <p class="sub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para enfocar todo el tablero en esa semana; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
@@ -304,7 +304,7 @@ table.detail tbody tr:hover{background:var(--paper)}
         </section>
 
         <section class="panel tall">
-          <h3>Categoría de servicio</h3>
+          <h3>Categoría técnica por departamento</h3>
           <p class="sub">Clic en una barra para ver únicamente esa categoría en todo el tablero (clic de nuevo libera); la leyenda oculta departamentos. La fila "Vacío" agrupa registros sin ese dato; "N/A" respeta lo digitado en el Excel.</p>
           <div class="cwrap"><canvas id="cCat"></canvas></div>
         </section>
@@ -379,7 +379,7 @@ table.detail tbody tr:hover{background:var(--paper)}
             <table class="detail">
               <thead>
                 <tr>
-                  <th>Fecha</th><th>Cliente</th><th>Dirección</th><th>OT</th><th>Tipo</th>
+                  <th>Fecha</th><th>ID servicio</th><th>Cliente</th><th>Dirección</th><th>OT</th><th>Tipo</th>
                   <th>Descripción</th><th>Estado</th><th>Informe</th><th>Técnico</th><th>Comentarios</th>
                 </tr>
               </thead>
@@ -446,15 +446,41 @@ function sheetMonthOf(name){
 
 const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75"];
 
-// colores fijos por categoría
+// color estable por nombre: el mismo valor siempre recibe el mismo color,
+// sin importar el orden ni los filtros activos
+function stableColor(name){
+  const s = norm(name).toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+/* ---------------------------------------------------------------------
+   Paleta estándar del tablero: un color = un significado en TODAS las
+   gráficas y etiquetas.
+     Verde      = hecho        (Completado, Entregado, Con OT)
+     Ámbar      = en espera    (Pendiente)
+     Azul       = reprogramado
+     Rojo       = dato faltante (Vacío, Sin OT)
+     Gris claro = no aplica    (N/A)
+     Gris oscuro= anulado      (Cancelado)
+   --------------------------------------------------------------------- */
+const C_VERDE   = "#2F6B4F";
+const C_AMBAR   = "#C48A16";
+const C_AZUL    = "#2B5F8C";
+const C_ROJO    = "#C8102E";
+const C_NA      = "#9AA5AD";
+const C_GRIS    = "#5A6B75";
+const C_GRISMED = "#6B7680";
+
 const ESTADO_COLOR = {
-  "Completado":"#2F6B4F","Pendiente":"#C48A16","Reprogramado":"#2B5F8C",
-  "Cancelado":"#C8102E","N/A":"#9AA5AD","Vacío":"#5A6B75"
+  "Completado":C_VERDE,"Pendiente":C_AMBAR,"Reprogramado":C_AZUL,
+  "Cancelado":C_GRIS,"N/A":C_NA,"Vacío":C_ROJO
 };
 const INFORME_COLOR = {
-  "Entregado":"#2F6B4F","Pendiente":"#C48A16","N/A":"#9AA5AD","Vacío":"#C8102E","Otro":"#6B7680"
+  "Entregado":C_VERDE,"Pendiente":C_AMBAR,"N/A":C_NA,"Vacío":C_ROJO,"Otro":C_GRISMED
 };
-const OT_COLOR = { "Con OT":"#2F6B4F", "Sin OT":"#C8102E" };
+const OT_COLOR = { "Con OT":C_VERDE, "Sin OT":C_ROJO };
 
 // orden canónico de las categorías en leyendas y donas
 const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
@@ -598,7 +624,7 @@ function ingest(matrix, sheetName){
       // valores crudos para las tablas (vacío = celda vacía, N/A = "N/A")
       _raw: { cliente: clienteVal, dir: dirVal, tipo: tipoVal, categoria: catVal,
               depto: deptoVal, tecnico: tecnicoVal, zona: zonaVal, cierre: clean(get("cierre")),
-              informe: informeVal, ot: otVal, desc: descVal, coment: comentVal }
+              informe: informeVal, ot: otVal, desc: descVal, coment: comentVal, idserv: idVal }
     };
     rec.mes  = fecha ? monthKey(fecha)  : null;
     rec.sem  = fecha ? isoWeekKey(fecha) : null;
@@ -840,23 +866,26 @@ function orderedList(universe, order){
 /* =====================================================================
    6a. FILTRO CRUZADO DESDE LAS GRÁFICAS
    Dos interacciones según dónde se haga clic:
-   - Barras y segmentos de dona = AISLAR: todo el tablero queda solo con
-     ese valor (clic de nuevo sobre él lo libera).
+   - Barras, segmentos de dona y puntos de Ritmo semanal = AISLAR:
+     todo el tablero queda solo con ese valor (clic de nuevo lo libera).
    - Leyendas = OCULTAR/MOSTRAR: quita o devuelve valores individuales.
    ===================================================================== */
 const SERIES_DIM = {
+  sem:"sem",
   tipo:"tipo", estado:"estado", depto:"depto", informe:"informeCat",
   cliente:"cliente", tecnico:"tecnico", categoria:"categoria",
   desc:"desc", zona:"zona", otCat:"otCat"
 };
 
 const SERIES_VIS = {
+  sem:null,
   tipo:null, estado:null, depto:null, informe:null,
   cliente:null, tecnico:null, categoria:null,
   desc:null, zona:null, otCat:null
 };
 
 let UNIVERSE = {
+  sem:new Set(),
   tipo:new Set(), estado:new Set(), depto:new Set(), informe:new Set(),
   cliente:new Set(), tecnico:new Set(), categoria:new Set(),
   desc:new Set(), zona:new Set(), otCat:new Set()
@@ -888,7 +917,7 @@ function toggleSeries(dim, value){
   render();
 }
 
-// clic en barra o segmento: aisla el valor; si ya está aislado, libera
+// clic en barra, segmento o punto: aisla el valor; si ya está aislado, libera
 function isolateSeries(dim, value){
   const cur = SERIES_VIS[dim];
   if (cur && cur.size === 1 && cur.has(value)){
@@ -985,8 +1014,8 @@ function chartTrend(universe, rows){
   const datasets = tipos.map((t,i) => ({
     label:t,
     data: months.map(m => rows.filter(r => r.mes === m && r.tipo === t).length),
-    borderColor: PALETTE[i % PALETTE.length],
-    backgroundColor: PALETTE[i % PALETTE.length],
+    borderColor: stableColor(t),
+    backgroundColor: stableColor(t),
     borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5,
     hidden: vis ? !vis.has(t) : false
   }));
@@ -1014,7 +1043,7 @@ function chartEstado(universe, rows){
   draw("cEstado", { type:"bar", data:{ labels:months.map(monthLabel),
       datasets: estados.map(e => ({ label:e,
         data: months.map(m => rows.filter(r => r.mes === m && r.estado === e).length),
-        backgroundColor: ESTADO_COLOR[e] || "#6B7680",
+        backgroundColor: ESTADO_COLOR[e] || C_GRISMED,
         hidden: vis ? !vis.has(e) : false })) },
     options:{ maintainAspectRatio:false,
       plugins:{ legend:{ onClick: seriesLegendClick("estado"), labels:{ boxWidth:12, boxHeight:12 } } },
@@ -1028,29 +1057,40 @@ function chartInformeMes(universe, rows){
   draw("cInfMes", { type:"bar", data:{ labels:months.map(monthLabel),
       datasets: cats.map((c,i) => ({ label:c,
         data: months.map(m => rows.filter(r => r.mes === m && r.informeCat === c).length),
-        backgroundColor: INFORME_COLOR[c] || PALETTE[i % PALETTE.length],
+        backgroundColor: INFORME_COLOR[c] || C_GRISMED,
         hidden: vis ? !vis.has(c) : false })) },
     options:{ maintainAspectRatio:false,
       plugins:{ legend:{ onClick: seriesLegendClick("informe"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales: baseScales(false, true, "Mes", "Servicios") } });
 }
 
+// clic en un punto = aislar esa semana en todo el tablero (clic de nuevo libera)
 function chartWeek(universe, rows){
   const weeks = [...new Set(universe.map(r => r.sem).filter(Boolean))].sort();
   const multiYear = new Set(weeks.map(w => w.split("-W")[0])).size > 1;
+  const labels = weeks.map(w => weekRangeLabel(w, multiYear));
+  const keyByLabel = new Map(labels.map((l,i) => [l, weeks[i]]));
   draw("cWeek", { type:"line",
-      data:{ labels: weeks.map(w => weekRangeLabel(w, multiYear)),
+      data:{ labels,
         datasets:[{ label:"Servicios", data: weeks.map(w => rows.filter(r => r.sem === w).length),
-          borderColor:"#2B5F8C", backgroundColor:"rgba(43,95,140,.12)", fill:true, borderWidth:2, tension:.25, pointRadius:2 }] },
+          borderColor:C_AZUL, backgroundColor:"rgba(43,95,140,.12)", fill:true,
+          borderWidth:2, tension:.25, pointRadius:3, pointHoverRadius:6 }] },
     options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+      onClick: (e, els, chart) => {
+        if (!els.length) return;
+        const key = keyByLabel.get(chart.data.labels[els[0].index]);
+        if (key) isolateSeries("sem", key);
+      },
+      onHover: pointerHover,
       scales:{
-        x:{ grid:{ display:false }, title: axisTitle("Semana (lunes a domingo)"),
+        x:{ grid:{ display:false }, title: axisTitle("Semana (lunes a domingo) — haga clic en un punto para enfocar el tablero en esa semana"),
             ticks:{ autoSkip:true, maxRotation:60, maxTicksLimit:18 } },
         y:{ beginAtZero:true, grid:gridLight, title: axisTitle("Servicios cerrados") } } } });
 }
 
 // barras horizontales: clic en barra = aislar ese valor en todo el tablero
 // n = null muestra TODOS los valores; la altura del panel se adapta a la cantidad de barras
+// color puede ser un string fijo o una función (nombre -> color estable)
 function chartBarH(id, map, n, color, xLabel, yLabel, dim){
   const all = [...map.entries()].sort((a,b) => b[1]-a[1]);
   const top = n ? all.slice(0, n) : all;
@@ -1060,7 +1100,9 @@ function chartBarH(id, map, n, color, xLabel, yLabel, dim){
   wrap.style.height = Math.max(360, top.length * 24 + 70) + "px";
 
   draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
-      datasets:[{ data: top.map(e => e[1]), backgroundColor: color, borderRadius:2 }] },
+      datasets:[{ data: top.map(e => e[1]),
+                  backgroundColor: typeof color === "function" ? top.map(e => color(e[0])) : color,
+                  borderRadius:2 }] },
     options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
       onClick: dim ? isolateClick(dim) : undefined,
       onHover: dim ? pointerHover : undefined,
@@ -1081,7 +1123,7 @@ function chartCat(universe, rows){
   draw("cCat", { type:"bar", data:{ labels:cats,
       datasets: deptos.map((d,i) => ({ label:d,
         data: cats.map(c => rows.filter(r => r.categoria === c && r.depto === d).length),
-        backgroundColor: PALETTE[i % PALETTE.length],
+        backgroundColor: stableColor(d),
         hidden: vis ? !vis.has(d) : false })) },
     options:{ indexAxis:"y", maintainAspectRatio:false,
       onClick: isolateClick("categoria"),
@@ -1099,7 +1141,7 @@ function chartInforme(rows){
     return Math.round(con.filter(r => /entregad/i.test(r.informe)).length / con.length * 1000) / 10;
   });
   draw("cInf", { type:"line", data:{ labels:months.map(monthLabel),
-      datasets:[{ label:"% entregado", data:pct, borderColor:"#2F6B4F",
+      datasets:[{ label:"% entregado", data:pct, borderColor:C_VERDE,
         backgroundColor:"rgba(47,107,79,.12)", fill:true, borderWidth:2, tension:.25,
         pointRadius:4, spanGaps:true }] },
     options:{ maintainAspectRatio:false, plugins:{ legend:{ display:false } },
@@ -1113,7 +1155,7 @@ function chartEstadoGen(rows){
   draw("cEstadoGen", { type:"doughnut",
     data:{ labels: estados,
       datasets:[{ data: estados.map(e => rows.filter(r => r.estado === e).length),
-        backgroundColor: estados.map(e => ESTADO_COLOR[e] || "#6B7680"),
+        backgroundColor: estados.map(e => ESTADO_COLOR[e] || C_GRISMED),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
       onClick: isolateClick("estado"),
@@ -1127,7 +1169,7 @@ function chartInformeGen(rows){
   draw("cInfGen", { type:"doughnut",
     data:{ labels: cats,
       datasets:[{ data: cats.map(c => rows.filter(r => r.informeCat === c).length),
-        backgroundColor: cats.map(c => INFORME_COLOR[c] || "#6B7680"),
+        backgroundColor: cats.map(c => INFORME_COLOR[c] || C_GRISMED),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
       onClick: isolateClick("informe"),
@@ -1141,7 +1183,7 @@ function chartOtGen(rows){
   draw("cOt", { type:"doughnut",
     data:{ labels: cats,
       datasets:[{ data: cats.map(c => rows.filter(r => r.otCat === c).length),
-        backgroundColor: cats.map(c => OT_COLOR[c] || "#6B7680"),
+        backgroundColor: cats.map(c => OT_COLOR[c] || C_GRISMED),
         borderColor:"#FFFFFF", borderWidth:2 }] },
     options:{ maintainAspectRatio:false, cutout:"55%",
       onClick: isolateClick("otCat"),
@@ -1323,7 +1365,7 @@ function estadoTag(estado){
   if (/completad/i.test(estado))   return '<span class="tag ok">Completado</span>';
   if (/pendiente/i.test(estado))   return '<span class="tag warn">Pendiente</span>';
   if (/reprogramad/i.test(estado)) return '<span class="tag info">Reprogramado</span>';
-  if (/cancelad/i.test(estado))    return '<span class="tag bad">Cancelado</span>';
+  if (/cancelad/i.test(estado))    return '<span class="tag muted">Cancelado</span>';
   return '<span class="tag muted">' + esc(estado) + '</span>';
 }
 
@@ -1340,6 +1382,7 @@ function renderDetail(rows){
   const shown = rows.slice().sort((a,b) => t(b) - t(a)).slice(0, DETAIL_LIMIT);
   $("detailBody").innerHTML = shown.map(r => `<tr>
     <td>${r.fecha ? r.fecha.toISOString().slice(0,10) : ""}</td>
+    <td>${esc(r._raw.idserv)}</td>
     <td>${esc(r._raw.cliente)}</td>
     <td>${esc(r._raw.dir)}</td>
     <td>${esc(r._raw.ot)}</td>
@@ -1361,6 +1404,7 @@ function renderDetail(rows){
 function render(){
   const panelRows = filtered();        // filtros del panel lateral
   UNIVERSE = {
+    sem:      new Set(panelRows.map(r => r.sem).filter(Boolean)),
     tipo:     new Set(panelRows.map(r => r.tipo)),
     estado:   new Set(panelRows.map(r => r.estado)),
     depto:    new Set(panelRows.map(r => r.depto)),
@@ -1393,8 +1437,8 @@ function render(){
   chartInformeMes(panelRows, rows);
   chartWeek(panelRows, rows);
   chartInforme(rows);
-  chartBarH("cTipo", countBy(rows, r => r.tipo), null, "#2B5F8C", "Servicios", "Tipo de servicio", "tipo");
-  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "#2B5F8C", "Servicios", "Cliente", "cliente");
+  chartBarH("cTipo", countBy(rows, r => r.tipo), null, stableColor, "Servicios", "Tipo de servicio", "tipo");
+  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, C_AZUL, "Servicios", "Cliente", "cliente");
   chartCat(panelRows, rows);
   chartBarH("cTec", countBy(rows, r => r.tecnico), null, "#3D4A52", "Servicios", "Técnico", "tecnico");
   chartBarH("cDesc", countBy(rows, r => r.desc), 12, "#6B4E7D", "Servicios", "Tipo de trabajo", "desc");
