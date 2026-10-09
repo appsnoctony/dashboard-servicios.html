@@ -269,7 +269,7 @@ table.detail tbody tr:hover{background:var(--paper)}
       </div>
 
       <div class="grid">
-        <!-- Volumen mensual (arriba, como antes) -->
+        <!-- Volumen mensual (arriba) -->
         <section class="panel wide tall hero">
           <h3>Volumen mensual por tipo de servicio</h3>
           <p class="sub">Cómo evoluciona la carga por tipo — incluye Preventivo, Correctivo, Instalación y Vacaciones, entre otros. La leyenda oculta o muestra cada tipo en todo el tablero. Conteo por ID de servicio.</p>
@@ -346,31 +346,17 @@ table.detail tbody tr:hover{background:var(--paper)}
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
-        <!-- 11. Estado de informes por mes -->
-        <section class="panel">
-          <h3>Estado de informes por mes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar), contados por ID de servicio. La leyenda oculta o muestra cada categoría en todo el tablero.</p>
-          <div class="cwrap"><canvas id="cInfMes"></canvas></div>
-        </section>
-
-        <!-- 12. OT asignada -->
-        <section class="panel">
+        <!-- 11-13. OT, dona de estado y completitud -->
+        <section class="panel third">
           <h3>OT asignada</h3>
           <p class="sub">Servicios con número de OT frente a los que no lo tienen registrado. Clic en un segmento para ver únicamente ese grupo en todo el tablero; la leyenda lo oculta o muestra.</p>
           <div class="cwrap"><canvas id="cOt"></canvas></div>
         </section>
 
-        <!-- 13-15. Donas y completitud -->
         <section class="panel third">
           <h3>Estado general</h3>
           <p class="sub">Distribución total del filtro activo. Clic en un segmento para ver únicamente ese estado en todo el tablero; la leyenda lo oculta o muestra.</p>
           <div class="cwrap"><canvas id="cEstadoGen"></canvas></div>
-        </section>
-
-        <section class="panel third">
-          <h3>Estado de informes</h3>
-          <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar). Clic en un segmento para ver únicamente esa categoría en todo el tablero; la leyenda la oculta o muestra.</p>
-          <div class="cwrap"><canvas id="cInfGen"></canvas></div>
         </section>
 
         <section class="panel third">
@@ -489,14 +475,10 @@ const ESTADO_COLOR = {
   "Completado":C_VERDE,"Pendiente":C_AMBAR,"Reprogramado":C_AZUL,
   "Cancelado":C_GRIS,"N/A":C_NA,"Vacío":C_ROJO
 };
-const INFORME_COLOR = {
-  "Entregado":C_VERDE,"Pendiente":C_AMBAR,"N/A":C_NA,"Vacío":C_ROJO,"Otro":C_GRISMED
-};
 const OT_COLOR = { "Con OT":C_VERDE, "Sin OT":C_ROJO };
 
 // orden canónico de las categorías en leyendas y donas
 const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
-const INFORME_ORDER = ["Entregado","Pendiente","N/A","Vacío","Otro"];
 const OT_ORDER = ["Con OT","Sin OT"];
 
 // paleta ampliada para categorías no semánticas (tipos, clientes, técnicos…)
@@ -943,21 +925,21 @@ function orderedList(universe, order){
    ===================================================================== */
 const SERIES_DIM = {
   sem:"sem",
-  tipo:"tipo", estado:"estado", depto:"depto", informe:"informeCat",
+  tipo:"tipo", estado:"estado", depto:"depto",
   cliente:"cliente", tecnico:"tecnico", categoria:"categoria",
   desc:"desc", zona:"zona", otCat:"otCat"
 };
 
 const SERIES_VIS = {
   sem:null,
-  tipo:null, estado:null, depto:null, informe:null,
+  tipo:null, estado:null, depto:null,
   cliente:null, tecnico:null, categoria:null,
   desc:null, zona:null, otCat:null
 };
 
 let UNIVERSE = {
   sem:new Set(),
-  tipo:new Set(), estado:new Set(), depto:new Set(), informe:new Set(),
+  tipo:new Set(), estado:new Set(), depto:new Set(),
   cliente:new Set(), tecnico:new Set(), categoria:new Set(),
   desc:new Set(), zona:new Set(), otCat:new Set()
 };
@@ -1105,20 +1087,6 @@ function chartEstado(universe, rows){
         hidden: vis ? !vis.has(e) : false })) },
     options:{ maintainAspectRatio:false,
       plugins:{ legend:{ onClick: seriesLegendClick("estado"), labels:{ boxWidth:12, boxHeight:12 } } },
-      scales: baseScales(false, true, "Mes", "Servicios") } });
-}
-
-function chartInformeMes(universe, rows){
-  const months = sortedMonths(universe);
-  const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
-  const vis = SERIES_VIS.informe;
-  draw("cInfMes", { type:"bar", data:{ labels:months.map(monthLabel),
-      datasets: cats.map(c => ({ label:c,
-        data: months.map(m => rows.filter(r => r.mes === m && r.informeCat === c).length),
-        backgroundColor: INFORME_COLOR[c] || C_GRISMED,
-        hidden: vis ? !vis.has(c) : false })) },
-    options:{ maintainAspectRatio:false,
-      plugins:{ legend:{ onClick: seriesLegendClick("informe"), labels:{ boxWidth:12, boxHeight:12 } } },
       scales: baseScales(false, true, "Mes", "Servicios") } });
 }
 
@@ -1291,20 +1259,6 @@ function chartEstadoGen(rows){
       onClick: isolateClick("estado"),
       onHover: pointerHover,
       plugins:{ legend:{ position:"right", onClick: seriesLegendClick("estado"),
-                 labels:{ boxWidth:12, boxHeight:12 } } } } });
-}
-
-function chartInformeGen(rows){
-  const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
-  draw("cInfGen", { type:"doughnut",
-    data:{ labels: cats,
-      datasets:[{ data: cats.map(c => rows.filter(r => r.informeCat === c).length),
-        backgroundColor: cats.map(c => INFORME_COLOR[c] || C_GRISMED),
-        borderColor:"#FFFFFF", borderWidth:2 }] },
-    options:{ maintainAspectRatio:false, cutout:"55%",
-      onClick: isolateClick("informe"),
-      onHover: pointerHover,
-      plugins:{ legend:{ position:"right", onClick: seriesLegendClick("informe"),
                  labels:{ boxWidth:12, boxHeight:12 } } } } });
 }
 
@@ -1538,7 +1492,6 @@ function render(){
     tipo:     new Set(panelRows.map(r => r.tipo)),
     estado:   new Set(panelRows.map(r => r.estado)),
     depto:    new Set(panelRows.map(r => r.depto)),
-    informe:  new Set(panelRows.map(r => r.informeCat)),
     cliente:  new Set(panelRows.map(r => r.cliente)),
     tecnico:  new Set(panelRows.map(r => r.tecnico)),
     categoria:new Set(panelRows.map(r => r.categoria)),
@@ -1573,10 +1526,8 @@ function render(){
   chartWeek(panelRows, rows);
   chartHoras(rows);
   chartEstado(panelRows, rows);
-  chartInformeMes(panelRows, rows);
   chartOtGen(rows);
   chartEstadoGen(rows);
-  chartInformeGen(rows);
   renderSinFecha(rows);
   renderDetail(rows);
 }
