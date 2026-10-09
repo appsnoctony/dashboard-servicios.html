@@ -151,7 +151,7 @@ button,input,select{font-family:inherit;font-size:inherit}
 .knav.r{right:-11px}
 
 /* ---------- panels ---------- */
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:start}
 .panel{
   grid-column:span 6;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius);padding:14px 16px 16px;min-width:0;
@@ -167,6 +167,14 @@ button,input,select{font-family:inherit;font-size:inherit}
 .hero{background:var(--slate-deep);border-color:var(--slate-deep);color:#F3F5F4}
 .hero h3{color:#fff}
 .hero p.sub{color:#A9B5BC}
+
+/* botón desplegar/colapsar barras extra */
+.chart-more{
+  display:none;width:100%;margin-top:8px;padding:6px 10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  color:var(--slate);cursor:pointer;font-size:12px;font-weight:500;
+}
+.chart-more:hover{background:var(--paper)}
 
 /* ---------- quality bars ---------- */
 .qual{list-style:none;margin:0;padding:0}
@@ -261,6 +269,13 @@ table.detail tbody tr:hover{background:var(--paper)}
       </div>
 
       <div class="grid">
+        <!-- Volumen mensual (arriba, como antes) -->
+        <section class="panel wide tall hero">
+          <h3>Volumen mensual por tipo de servicio</h3>
+          <p class="sub">Cómo evoluciona la carga por tipo — incluye Preventivo, Correctivo, Instalación y Vacaciones, entre otros. La leyenda oculta o muestra cada tipo en todo el tablero. Conteo por ID de servicio.</p>
+          <div class="cwrap"><canvas id="cTrend"></canvas></div>
+        </section>
+
         <!-- 1. Departamento -->
         <section class="panel tall">
           <h3>Servicios por departamento</h3>
@@ -292,7 +307,7 @@ table.detail tbody tr:hover{background:var(--paper)}
         <!-- 5. Cliente -->
         <section class="panel tall">
           <h3>Clientes con mayor demanda</h3>
-          <p class="sub">Los 12 primeros del filtro activo. Haga clic en una barra para ver únicamente ese cliente en todo el tablero; clic de nuevo lo libera.</p>
+          <p class="sub">Los primeros del filtro activo. Haga clic en una barra para ver únicamente ese cliente en todo el tablero; clic de nuevo lo libera.</p>
           <div class="cwrap"><canvas id="cCliente"></canvas></div>
         </section>
 
@@ -311,48 +326,41 @@ table.detail tbody tr:hover{background:var(--paper)}
         </section>
 
         <!-- 8. Ritmo semanal -->
-        <section class="panel">
+        <section class="panel tall">
           <h3>Ritmo semanal</h3>
           <p class="sub" id="weekSub">Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para ver esa semana por días y enfocar todo el tablero en ella.</p>
           <div class="cwrap"><canvas id="cWeek"></canvas></div>
         </section>
 
-        <!-- 9. Horas de trabajo (NUEVO) -->
+        <!-- 9. Horas de trabajo -->
         <section class="panel tall">
           <h3>Horas de trabajo por técnico</h3>
           <p class="sub">Suma de horas trabajadas (Hora cierre − Hora inicio) por técnico, contadas por ID de servicio. Solo incluye servicios con ambas horas válidas y coherentes. Haga clic en una barra para ver únicamente esa persona en todo el tablero; clic de nuevo la libera.</p>
           <div class="cwrap"><canvas id="cHoras"></canvas></div>
         </section>
 
-        <!-- 10. Volumen mensual (hero) -->
-        <section class="panel wide tall hero">
-          <h3>Volumen mensual por tipo de servicio</h3>
-          <p class="sub">Cómo evoluciona la carga por tipo — incluye Preventivo, Correctivo, Instalación y Vacaciones, entre otros. La leyenda oculta o muestra cada tipo en todo el tablero. Conteo por ID de servicio.</p>
-          <div class="cwrap"><canvas id="cTrend"></canvas></div>
-        </section>
-
-        <!-- 11. Estado de trabajos por mes -->
-        <section class="panel">
+        <!-- 10. Estado de trabajos por mes -->
+        <section class="panel tall">
           <h3>Estado de trabajos por mes</h3>
           <p class="sub">Completado, Pendiente, Reprogramado, N/A y Vacío (campo sin llenar), contados por ID de servicio. La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cEstado"></canvas></div>
         </section>
 
-        <!-- 12. Estado de informes por mes -->
+        <!-- 11. Estado de informes por mes -->
         <section class="panel">
           <h3>Estado de informes por mes</h3>
           <p class="sub">Entregado, Pendiente, N/A y Vacío (campo sin llenar), contados por ID de servicio. La leyenda oculta o muestra cada categoría en todo el tablero.</p>
           <div class="cwrap"><canvas id="cInfMes"></canvas></div>
         </section>
 
-        <!-- 13. OT asignada -->
-        <section class="panel tall">
+        <!-- 12. OT asignada -->
+        <section class="panel">
           <h3>OT asignada</h3>
           <p class="sub">Servicios con número de OT frente a los que no lo tienen registrado. Clic en un segmento para ver únicamente ese grupo en todo el tablero; la leyenda lo oculta o muestra.</p>
           <div class="cwrap"><canvas id="cOt"></canvas></div>
         </section>
 
-        <!-- 14-16. Donas y completitud -->
+        <!-- 13-15. Donas y completitud -->
         <section class="panel third">
           <h3>Estado general</h3>
           <p class="sub">Distribución total del filtro activo. Clic en un segmento para ver únicamente ese estado en todo el tablero; la leyenda lo oculta o muestra.</p>
@@ -1180,15 +1188,47 @@ function chartWeek(universe, rows){
     "Servicios cerrados por semana (lunes a domingo), contados por ID de servicio. Haga clic en un punto para ver esa semana por días y enfocar todo el tablero en ella.";
 }
 
-// barras horizontales: clic en barra = aislar ese valor en todo el tablero
-// n = null muestra TODOS los valores; la altura del panel se adapta
-// color = "auto" (asignación estable y única por nombre) | string fijo | función
-function chartBarH(id, map, n, color, xLabel, yLabel, dim){
-  const all = [...map.entries()].sort((a,b) => b[1]-a[1]);
-  const top = n ? all.slice(0, n) : all;
+/* ---------------------------------------------------------------------
+   Barras horizontales con despliegue:
+   - Muestra las primeras `viewLimit` barras (12 por defecto).
+   - Si hay más, agrega un botón al pie del panel para desplegarlas todas
+     ("▼ Mostrar los N restantes") y volver a colapsar ("▲ Mostrar menos").
+   - Clic en barra = aislar ese valor en todo el tablero.
+   - color = "auto" (estable y único por nombre) | string fijo | función
+   --------------------------------------------------------------------- */
+const CHART_EXPANDED = {};   // id de gráfica -> true si está desplegada
 
-  const wrap = $(id).parentElement;
-  wrap.style.height = Math.max(360, top.length * 24 + 70) + "px";
+function chartBarH(id, map, viewLimit, color, xLabel, yLabel, dim){
+  const all = [...map.entries()].sort((a,b) => b[1]-a[1]);
+  const limit = viewLimit || 12;
+  const expanded = !!CHART_EXPANDED[id];
+  const top = expanded ? all : all.slice(0, limit);
+  const hiddenCount = all.length - top.length;
+
+  const wrap = $(id).parentElement;               // .cwrap
+  const panel = wrap.closest(".panel");
+  wrap.style.height = Math.max(280, top.length * 24 + 70) + "px";
+
+  // botón desplegar / colapsar (solo si hay más datos que el límite)
+  let btn = panel.querySelector(".chart-more");
+  if (all.length > limit){
+    if (!btn){
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chart-more";
+      btn.addEventListener("click", () => {
+        CHART_EXPANDED[id] = !CHART_EXPANDED[id];
+        render();
+      });
+      wrap.after(btn);
+    }
+    btn.style.display = "block";
+    btn.textContent = expanded
+      ? "▲ Mostrar menos"
+      : "▼ Mostrar los " + hiddenCount + " restantes";
+  } else if (btn){
+    btn.style.display = "none";
+  }
 
   const bg = color === "auto"
     ? (() => { const cmap = assignColors(top.map(e => e[0])); return top.map(e => cmap[e[0]]); })()
@@ -1237,7 +1277,7 @@ function chartHoras(rows){
   }
   // redondeo a 1 decimal para evitar colas de flotantes (ej. 168.30000000004)
   for (const [k,v] of map) map.set(k, Math.round(v * 10) / 10);
-  chartBarH("cHoras", map, null, "auto", "Horas de trabajo", "Técnico", "tecnico");
+  chartBarH("cHoras", map, 12, "auto", "Horas de trabajo", "Técnico", "tecnico");
 }
 
 function chartEstadoGen(rows){
@@ -1522,16 +1562,16 @@ function render(){
 
   renderKpis(rows);
   renderQuality(rows);
-  chartBarH("cDepto", countBy(rows, r => r.depto), 10, "auto", "Servicios", "Departamento", "depto");
-  chartBarH("cTipo", countBy(rows, r => r.tipo), null, "auto", "Servicios", "Tipo de servicio", "tipo");
+  chartTrend(panelRows, rows);
+  chartBarH("cDepto", countBy(rows, r => r.depto), 12, "auto", "Servicios", "Departamento", "depto");
+  chartBarH("cTipo", countBy(rows, r => r.tipo), 12, "auto", "Servicios", "Tipo de servicio", "tipo");
   chartCat(panelRows, rows);
   chartBarH("cDesc", countBy(rows, r => r.desc), 12, "auto", "Servicios", "Tipo de trabajo", "desc");
   chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "auto", "Servicios", "Cliente", "cliente");
-  chartBarH("cTec", countBy(rows, r => r.tecnico), null, "auto", "Servicios", "Técnico", "tecnico");
-  chartBarH("cZona", countBy(rows, r => r.zona), 10, "auto", "Servicios", "Zona de gira", "zona");
+  chartBarH("cTec", countBy(rows, r => r.tecnico), 12, "auto", "Servicios", "Técnico", "tecnico");
+  chartBarH("cZona", countBy(rows, r => r.zona), 12, "auto", "Servicios", "Zona de gira", "zona");
   chartWeek(panelRows, rows);
   chartHoras(rows);
-  chartTrend(panelRows, rows);
   chartEstado(panelRows, rows);
   chartInformeMes(panelRows, rows);
   chartOtGen(rows);
