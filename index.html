@@ -430,6 +430,7 @@ const COLS = {
 };
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const DIAS_SEM = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
 // nombres de pestaña -> número de mes (acepta "Setiembre" y mayúsculas/acentos)
 const MES_SHEET = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7,
@@ -442,17 +443,6 @@ function sheetMonthOf(name){
     if (s.startsWith(k)) return m;
   }
   return null;
-}
-
-const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75"];
-
-// color estable por nombre: el mismo valor siempre recibe el mismo color,
-// sin importar el orden ni los filtros activos
-function stableColor(name){
-  const s = norm(name).toLowerCase();
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
 }
 
 /* ---------------------------------------------------------------------
@@ -486,6 +476,45 @@ const OT_COLOR = { "Con OT":C_VERDE, "Sin OT":C_ROJO };
 const ESTADO_ORDER = ["Completado","Pendiente","Reprogramado","Cancelado","N/A","Vacío"];
 const INFORME_ORDER = ["Entregado","Pendiente","N/A","Vacío","Otro"];
 const OT_ORDER = ["Con OT","Sin OT"];
+
+// paleta ampliada para categorías no semánticas (tipos, clientes, técnicos…)
+const PALETTE = ["#2B5F8C","#C8102E","#C48A16","#2F6B4F","#6B4E7D","#1F7A78","#8A5A3B","#5A6B75",
+                 "#4E7A6A","#B0653A","#8C6DA8","#5E8AA8"];
+
+// color estable por nombre: el mismo valor siempre recibe el mismo color,
+// sin importar el orden ni los filtros activos
+function stableColor(name){
+  const s = norm(name).toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+// nombres con color semántico reservado: ganan en cualquier gráfica
+const RESERVED_NAME_COLORS = { "vacío": C_ROJO, "n/a": C_NA };
+
+// asigna un color a cada nombre de una lista:
+// 1) los reservados reciben su color semántico
+// 2) el resto usa stableColor, pero si ese color ya se usó en esta lista,
+//    toma el primer color libre de la paleta (evita repeticiones en la misma gráfica)
+function assignColors(names){
+  const used = new Set(Object.values(RESERVED_NAME_COLORS));
+  const out = {};
+  const pend = [];
+  for (const n of names){
+    const r = RESERVED_NAME_COLORS[norm(n).toLowerCase()];
+    if (r) out[n] = r; else pend.push(n);
+  }
+  for (const n of pend){
+    let c = stableColor(n);
+    if (used.has(c)){
+      for (const p of PALETTE){ if (!used.has(p)){ c = p; break; } }
+    }
+    out[n] = c;
+    used.add(c);
+  }
+  return out;
+}
 
 let RAW = [];
 const FILTERS = {};
@@ -555,6 +584,26 @@ function isoWeekKey(d){
 
 function monthKey(d){ return d.getUTCFullYear() + "-" + String(d.getUTCMonth()+1).padStart(2,"0"); }
 function monthLabel(k){ const [y,m] = k.split("-"); return MESES[+m-1].slice(0,3) + " " + y.slice(2); }
+
+// "2026-W28" -> Date UTC del lunes de esa semana ISO
+function mondayOfWeek(key){
+  const [y, w] = key.split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const dow = jan4.getUTCDay() || 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - dow + 1 + (w - 1) * 7);
+  return monday;
+}
+
+// "2026-W28" -> "6 jul – 12 jul" (lunes a domingo de esa semana ISO)
+function weekRangeLabel(key, withYear){
+  const monday = mondayOfWeek(key);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const fmt = d => d.getUTCDate() + " " + MESES[d.getUTCMonth()].slice(0,3).toLowerCase()
+                 + (withYear ? " " + String(d.getUTCFullYear()).slice(2) : "");
+  return fmt(monday) + " – " + fmt(sunday);
+}
 
 /* =====================================================================
    3. NORMALIZACIÓN DE FILAS
@@ -951,26 +1000,12 @@ function pointerHover(e, els){
   if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default";
 }
 
-const DIAS_SEM = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-
-// "2026-W28" -> Date UTC del lunes de esa semana ISO
-function mondayOfWeek(key){
-  const [y, w] = key.split("-W").map(Number);
-  const jan4 = new Date(Date.UTC(y, 0, 4));
-  const dow = jan4.getUTCDay() || 7;
-  const monday = new Date(jan4);
-  monday.setUTCDate(jan4.getUTCDate() - dow + 1 + (w - 1) * 7);
-  return monday;
-}
-
-// "2026-W28" -> "6 jul – 12 jul" (lunes a domingo de esa semana ISO)
-function weekRangeLabel(key, withYear){
-  const monday = mondayOfWeek(key);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-  const fmt = d => d.getUTCDate() + " " + MESES[d.getUTCMonth()].slice(0,3).toLowerCase()
-                 + (withYear ? " " + String(d.getUTCFullYear()).slice(2) : "");
-  return fmt(monday) + " – " + fmt(sunday);
+const resetBtnEl = $("btnSeriesReset");
+if (resetBtnEl){
+  resetBtnEl.addEventListener("click", () => {
+    for (const d of Object.keys(SERIES_VIS)) SERIES_VIS[d] = null;
+    render();
+  });
 }
 
 /* =====================================================================
@@ -1010,12 +1045,13 @@ function chartTrend(universe, rows){
   for (const must of ["Instalación","Vacaciones"]){
     if (UNIVERSE.tipo.has(must) && !tipos.includes(must)) tipos.push(must);
   }
+  const cmap = assignColors(tipos);   // color estable y único por tipo
   const vis = SERIES_VIS.tipo;
-  const datasets = tipos.map((t,i) => ({
+  const datasets = tipos.map(t => ({
     label:t,
     data: months.map(m => rows.filter(r => r.mes === m && r.tipo === t).length),
-    borderColor: stableColor(t),
-    backgroundColor: stableColor(t),
+    borderColor: cmap[t],
+    backgroundColor: cmap[t],
     borderWidth:2, tension:.28, pointRadius:3, pointHoverRadius:5,
     hidden: vis ? !vis.has(t) : false
   }));
@@ -1055,7 +1091,7 @@ function chartInformeMes(universe, rows){
   const cats = orderedList(UNIVERSE.informe, INFORME_ORDER);
   const vis = SERIES_VIS.informe;
   draw("cInfMes", { type:"bar", data:{ labels:months.map(monthLabel),
-      datasets: cats.map((c,i) => ({ label:c,
+      datasets: cats.map(c => ({ label:c,
         data: months.map(m => rows.filter(r => r.mes === m && r.informeCat === c).length),
         backgroundColor: INFORME_COLOR[c] || C_GRISMED,
         hidden: vis ? !vis.has(c) : false })) },
@@ -1131,20 +1167,21 @@ function chartWeek(universe, rows){
 }
 
 // barras horizontales: clic en barra = aislar ese valor en todo el tablero
-// n = null muestra TODOS los valores; la altura del panel se adapta a la cantidad de barras
-// color puede ser un string fijo o una función (nombre -> color estable)
+// n = null muestra TODOS los valores; la altura del panel se adapta
+// color = "auto" (asignación estable y única por nombre) | string fijo | función
 function chartBarH(id, map, n, color, xLabel, yLabel, dim){
   const all = [...map.entries()].sort((a,b) => b[1]-a[1]);
   const top = n ? all.slice(0, n) : all;
 
-  // el panel crece con la cantidad de barras (base 360 = panel "tall")
   const wrap = $(id).parentElement;
   wrap.style.height = Math.max(360, top.length * 24 + 70) + "px";
 
+  const bg = color === "auto"
+    ? (() => { const cmap = assignColors(top.map(e => e[0])); return top.map(e => cmap[e[0]]); })()
+    : (typeof color === "function" ? top.map(e => color(e[0])) : color);
+
   draw(id, { type:"bar", data:{ labels: top.map(e => e[0]),
-      datasets:[{ data: top.map(e => e[1]),
-                  backgroundColor: typeof color === "function" ? top.map(e => color(e[0])) : color,
-                  borderRadius:2 }] },
+      datasets:[{ data: top.map(e => e[1]), backgroundColor: bg, borderRadius:2 }] },
     options:{ indexAxis:"y", maintainAspectRatio:false, plugins:{ legend:{ display:false } },
       onClick: dim ? isolateClick(dim) : undefined,
       onHover: dim ? pointerHover : undefined,
@@ -1161,11 +1198,12 @@ function chartBarH(id, map, n, color, xLabel, yLabel, dim){
 function chartCat(universe, rows){
   const cats = topKeys(countBy(rows, r => r.categoria), 10);
   const deptos = [...UNIVERSE.depto].sort((a,b) => a.localeCompare(b,"es"));
+  const dmap = assignColors(deptos);
   const vis = SERIES_VIS.depto;
   draw("cCat", { type:"bar", data:{ labels:cats,
-      datasets: deptos.map((d,i) => ({ label:d,
+      datasets: deptos.map(d => ({ label:d,
         data: cats.map(c => rows.filter(r => r.categoria === c && r.depto === d).length),
-        backgroundColor: stableColor(d),
+        backgroundColor: dmap[d],
         hidden: vis ? !vis.has(d) : false })) },
     options:{ indexAxis:"y", maintainAspectRatio:false,
       onClick: isolateClick("categoria"),
@@ -1479,13 +1517,13 @@ function render(){
   chartInformeMes(panelRows, rows);
   chartWeek(panelRows, rows);
   chartInforme(rows);
-  chartBarH("cTipo", countBy(rows, r => r.tipo), null, stableColor, "Servicios", "Tipo de servicio", "tipo");
-  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, C_AZUL, "Servicios", "Cliente", "cliente");
+  chartBarH("cTipo", countBy(rows, r => r.tipo), null, "auto", "Servicios", "Tipo de servicio", "tipo");
+  chartBarH("cCliente", countBy(rows, r => r.cliente), 12, "auto", "Servicios", "Cliente", "cliente");
   chartCat(panelRows, rows);
-  chartBarH("cTec", countBy(rows, r => r.tecnico), null, "#3D4A52", "Servicios", "Técnico", "tecnico");
-  chartBarH("cDesc", countBy(rows, r => r.desc), 12, "#6B4E7D", "Servicios", "Tipo de trabajo", "desc");
-  chartBarH("cZona", countBy(rows, r => r.zona), 10, "#1F7A78", "Servicios", "Zona de gira", "zona");
-  chartBarH("cDepto", countBy(rows, r => r.depto), 10, "#8A5A3B", "Servicios", "Departamento", "depto");
+  chartBarH("cTec", countBy(rows, r => r.tecnico), null, "auto", "Servicios", "Técnico", "tecnico");
+  chartBarH("cDesc", countBy(rows, r => r.desc), 12, "auto", "Servicios", "Tipo de trabajo", "desc");
+  chartBarH("cZona", countBy(rows, r => r.zona), 10, "auto", "Servicios", "Zona de gira", "zona");
+  chartBarH("cDepto", countBy(rows, r => r.depto), 10, "auto", "Servicios", "Departamento", "depto");
   chartOtGen(rows);
   chartEstadoGen(rows);
   chartInformeGen(rows);
